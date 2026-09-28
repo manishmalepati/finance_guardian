@@ -65,6 +65,10 @@ function App() {
       body: JSON.stringify({ message }),
     });
     const result = await response.json();
+    if (!response.ok) {
+      setAnswer(result.detail ?? "Agent is not configured yet.");
+      return;
+    }
     setAnswer(`${result.answer} Tool: ${result.selected_tool}`);
   };
 
@@ -101,7 +105,7 @@ function App() {
               <Search size={18} />
             </button>
           </div>
-          <p className="answer">{answer || "The MVP agent routes questions to deterministic tools."}</p>
+          <p className="answer">{answer || "Chat requires a configured LLM provider and API key."}</p>
         </div>
       </section>
 

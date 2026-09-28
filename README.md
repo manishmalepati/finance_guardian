@@ -14,7 +14,8 @@ The first phase is a local-first modular monolith:
 - `evals`: small local eval suite for agent routing and grounded responses.
 
 The agent is intentionally bounded: it routes finance questions to approved tools,
-the tools calculate using code/SQL, and the agent synthesizes the answer.
+the tools calculate using code/SQL, and the agent synthesizes the answer. Chat
+requires a real LLM provider configuration and returns an error until one is set.
 
 ## Local Setup
 
@@ -45,6 +46,17 @@ docker compose exec backend pytest backend/tests
 docker compose exec backend dbt run --project-dir /app/dbt --profiles-dir /app/dbt
 docker compose exec backend dbt test --project-dir /app/dbt --profiles-dir /app/dbt
 docker compose exec backend python /app/evals/run.py
+```
+
+## Agent Configuration
+
+The app does not provide mock chat answers. Configure a provider before using
+`POST /agent/chat`:
+
+```bash
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-sonnet-4-5
+ANTHROPIC_API_KEY=your_key_here
 ```
 
 ## License
