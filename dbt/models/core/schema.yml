@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: dim_accounts
+    columns:
+      - name: account_id
+        tests:
+          - unique
+          - not_null
+  - name: dim_categories
+    columns:
+      - name: category_id
+        tests:
+          - unique
+          - not_null
+  - name: dim_merchants
+    columns:
+      - name: merchant_id
+        tests:
+          - unique
+          - not_null
+  - name: fct_transactions
+    columns:
+      - name: transaction_id
+        tests:
+          - unique
+          - not_null
+      - name: account_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_accounts')
+                field: account_id
+      - name: category_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_categories')
+                field: category_id

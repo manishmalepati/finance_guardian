@@ -1,0 +1,12 @@
+finance_guardian:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: postgres
+      user: "{{ env_var('POSTGRES_USER', 'finance_guardian') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD', 'finance_guardian') }}"
+      port: 5432
+      dbname: "{{ env_var('POSTGRES_DB', 'finance_guardian') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'analytics') }}"
+      threads: 4

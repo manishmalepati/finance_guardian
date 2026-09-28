@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: stg_chase_transactions
+    columns:
+      - name: transaction_id
+        tests:
+          - unique
+          - not_null
+      - name: posted_date
+        tests:
+          - not_null
+      - name: direction
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["credit", "debit"]

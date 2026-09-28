@@ -1,0 +1,21 @@
+name: finance_guardian
+version: "0.1.0"
+config-version: 2
+
+profile: finance_guardian
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+models:
+  finance_guardian:
+    staging:
+      +schema: staging
+      +materialized: view
+    core:
+      +schema: core
+      +materialized: table
+    marts:
+      +schema: marts
+      +materialized: table
