@@ -8,6 +8,8 @@ from backend.db.models import RawTransaction
 
 
 class AnalyticsService:
+    """Read-only finance analytics backed by SQL aggregates."""
+
     def __init__(self, session: Session):
         self.session = session
 

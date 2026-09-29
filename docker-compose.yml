@@ -27,7 +27,6 @@ services:
       DBT_PROFILES_DIR: /app/dbt
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - ./backend:/app/backend

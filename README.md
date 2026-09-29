@@ -11,7 +11,7 @@ The first phase is a local-first modular monolith:
 - `backend`: FastAPI, ingestion, analytics services, LangGraph agent, dbt CLI.
 - `postgres`: durable local database backed by a Docker named volume.
 - `dbt`: raw -> staging -> core -> marts transformations.
-- `evals`: small local eval suite for agent routing and grounded responses.
+- `evals`: small live-agent eval suite for tool choice and grounded responses.
 
 The agent is intentionally bounded: it routes finance questions to approved tools,
 the tools calculate using code/SQL, and the agent synthesizes the answer. Chat
@@ -50,7 +50,7 @@ docker compose exec backend python /app/evals/run.py
 
 ## Agent Configuration
 
-The app does not provide mock chat answers. Configure a provider before using
+The app does not provide mock chat answers. Configure Claude before using
 `POST /agent/chat`:
 
 ```bash
@@ -58,6 +58,9 @@ LLM_PROVIDER=anthropic
 LLM_MODEL=claude-sonnet-4-5
 ANTHROPIC_API_KEY=your_key_here
 ```
+
+The eval runner also requires this configuration because it exercises the real
+agent path.
 
 ## License
 

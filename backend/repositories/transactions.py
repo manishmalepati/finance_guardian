@@ -9,6 +9,8 @@ from backend.db.models import RawTransaction, StatementImport
 
 
 class TransactionRepository:
+    """Database access layer for raw transaction records."""
+
     def __init__(self, session: Session):
         self.session = session
 

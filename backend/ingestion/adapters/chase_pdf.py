@@ -10,12 +10,20 @@ from backend.ingestion.adapters.base import StatementAdapter
 
 
 class ChasePdfAdapter(StatementAdapter):
+    """MVP Chase statement parser.
+
+    This adapter preserves the source boundary so Plaid/CSV/PDF variants can be
+    added without changing downstream analytics or agent tools.
+    """
+
     source = "chase_pdf"
     _transaction_line = re.compile(
         r"^(?P<month>\d{1,2})/(?P<day>\d{1,2})\s+(?P<description>.+?)\s+(?P<amount>-?\$?\d[\d,]*\.\d{2})$"
     )
 
     def parse(self, content: bytes) -> list[ParsedTransaction]:
+        """Extract transaction-like rows from a Chase PDF statement."""
+
         transactions: list[ParsedTransaction] = []
         with pdfplumber.open(BytesIO(content)) as pdf:
             for page_index, page in enumerate(pdf.pages, start=1):

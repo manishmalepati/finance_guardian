@@ -8,12 +8,16 @@ from backend.repositories.transactions import TransactionRepository
 
 
 class IngestionService:
+    """Coordinates source parsing, idempotency checks, and raw persistence."""
+
     def __init__(self, session: Session):
         self.session = session
         self.repository = TransactionRepository(session)
         self.adapter_factory = AdapterFactory()
 
     def import_statement(self, filename: str, content: bytes, source: str = "chase_pdf") -> dict:
+        """Import one statement file if its content hash has not been seen."""
+
         file_hash = hashlib.sha256(content).hexdigest()
         existing = self.repository.find_import_by_hash(file_hash)
         if existing:
