@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from backend.agents.graph import FinanceAgent
 from backend.core.config import settings
 from backend.db.session import get_session
-from backend.llm.providers import build_llm_provider
+from backend.llm.providers import LLMProviderFactory
 
 router = APIRouter()
 
@@ -25,7 +25,7 @@ def chat(request: ChatRequest, session: Session = Depends(get_session)) -> dict:
             detail=configuration_error,
         )
 
-    llm_provider = build_llm_provider(settings)
+    llm_provider = LLMProviderFactory(settings).build()
     try:
         result = FinanceAgent(session, llm_provider=llm_provider).invoke(request.message)
     except Exception as exc:

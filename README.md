@@ -60,7 +60,8 @@ ANTHROPIC_API_KEY=your_key_here
 ```
 
 The eval runner also requires this configuration because it exercises the real
-agent path.
+agent path. The MVP keeps Claude responses capped at 300 output tokens to limit
+cost and keep answers concise.
 
 ## License
 
