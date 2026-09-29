@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: mart_monthly_spending
+    columns:
+      - name: month
+        tests:
+          - unique
+          - not_null
+  - name: mart_category_spending
+    columns:
+      - name: category
+        tests:
+          - not_null
+      - name: month
+        tests:
+          - not_null

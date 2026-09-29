@@ -1,0 +1,16 @@
+cases:
+  - id: monthly_summary_default
+    query: "How did my spending look by month?"
+    expected_tool: get_monthly_summary
+    must_include:
+      - "monthly"
+  - id: category_spend
+    query: "How much did I spend by category?"
+    expected_tool: get_spending_by_category
+    must_include:
+      - "category"
+  - id: largest_transactions
+    query: "What are my biggest transactions?"
+    expected_tool: get_largest_transactions
+    must_include:
+      - "largest"

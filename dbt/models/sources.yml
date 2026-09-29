@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: statement_imports
+      - name: statement_transactions
+        columns:
+          - name: id
+            tests:
+              - unique
+              - not_null
+          - name: posted_date
+            tests:
+              - not_null
+          - name: direction
+            tests:
+              - accepted_values:
+                  arguments:
+                    values: ["credit", "debit"]
