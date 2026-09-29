@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from backend.common.exceptions import ConfigurationError
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -22,6 +24,13 @@ class Settings(BaseSettings):
         if not self.anthropic_api_key.strip():
             return "Agent is not configured. Set ANTHROPIC_API_KEY before using chat."
         return None
+
+    def require_agent_configuration(self) -> None:
+        """Raise when the agent cannot use a configured production LLM."""
+
+        configuration_error = self.agent_configuration_error()
+        if configuration_error:
+            raise ConfigurationError(configuration_error)
 
 
 settings = Settings()

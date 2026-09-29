@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.common.exceptions import ConfigurationError
 from backend.core.config import Settings, settings
 from backend.llm.base import LLMProvider
 
@@ -41,7 +42,7 @@ class LLMProviderFactory:
 
         provider = self.settings.llm_provider.strip().lower()
         if provider != "anthropic":
-            raise ValueError("Unsupported LLM provider")
+            raise ConfigurationError("Unsupported LLM provider. Set LLM_PROVIDER to 'anthropic'.")
         return AnthropicProvider(
             api_key=self.settings.anthropic_api_key,
             model=self.settings.llm_model,

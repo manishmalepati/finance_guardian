@@ -2,9 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.routes import agent, analytics, health, imports, transactions
+from backend.common.exceptions import AppError, app_error_handler
 from backend.db.session import init_database
 
 app = FastAPI(title="Finance Guardian API", version="0.1.0")
+app.add_exception_handler(AppError, app_error_handler)
 
 app.add_middleware(
     CORSMiddleware,

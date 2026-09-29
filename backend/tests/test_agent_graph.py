@@ -1,6 +1,7 @@
 import pytest
 
 from backend.agents.graph import FinanceAgent, _extract_json
+from backend.common.exceptions import AgentPlanningError
 
 
 class FakeLLMProvider:
@@ -44,8 +45,16 @@ def test_plan_tool_call_rejects_unknown_tool():
     provider = FakeLLMProvider('{"tool_name":"run_sql","tool_args":{},"reasoning":"Unsafe."}')
     agent = build_planner_only_agent(provider)
 
-    with pytest.raises(ValueError, match="unknown finance tool"):
+    with pytest.raises(AgentPlanningError, match="unknown finance tool"):
         agent._plan_tool_call({"user_query": "Run SQL against my transactions"})
+
+
+def test_plan_tool_call_rejects_invalid_json():
+    provider = FakeLLMProvider("not json")
+    agent = build_planner_only_agent(provider)
+
+    with pytest.raises(AgentPlanningError, match="invalid tool plan"):
+        agent._plan_tool_call({"user_query": "How did spending look?"})
 
 
 def test_extract_json_accepts_fenced_json():
