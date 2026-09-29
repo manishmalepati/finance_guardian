@@ -14,3 +14,23 @@ cases:
     expected_tool: get_largest_transactions
     must_include:
       - "largest"
+  - id: merchant_search
+    query: "Find my Starbucks transactions."
+    expected_tool: search_transactions
+    must_include:
+      - "Starbucks"
+  - id: grocery_category
+    query: "How much did I spend on groceries?"
+    expected_tool: get_spending_by_category
+    must_include:
+      - "groceries"
+  - id: month_over_month
+    query: "Did my spending change across months?"
+    expected_tool: get_monthly_summary
+    must_include:
+      - "month"
+  - id: restaurant_category
+    query: "Show my food and restaurant spending."
+    expected_tool: get_spending_by_category
+    must_include:
+      - "restaurant"

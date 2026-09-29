@@ -5,10 +5,11 @@ import re
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from backend.agents.state import AgentState
+from backend.common.exceptions import AgentExecutionError, AgentPlanningError
 from backend.llm.base import LLMProvider
 
 
@@ -71,11 +72,17 @@ class FinanceAgent:
             },
             indent=2,
         )
-        raw_plan = self.llm_provider.complete(system_prompt, user_prompt)
-        plan = ToolPlan.model_validate(_extract_json(raw_plan))
+        try:
+            raw_plan = self.llm_provider.complete(system_prompt, user_prompt)
+            plan = ToolPlan.model_validate(_extract_json(raw_plan))
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise AgentPlanningError("Agent planning failed because the LLM returned an invalid tool plan.") from exc
+        except Exception as exc:
+            raise AgentExecutionError() from exc
+
         available_tool_names = {tool["name"] for tool in self.tools.prompt_schema()}
         if plan.tool_name not in available_tool_names:
-            raise ValueError(f"LLM requested an unknown finance tool: {plan.tool_name}")
+            raise AgentPlanningError(f"LLM requested an unknown finance tool: {plan.tool_name}")
         return {
             "selected_tool": plan.tool_name,
             "tool_args": plan.tool_args,
@@ -105,7 +112,10 @@ class FinanceAgent:
             },
             indent=2,
         )
-        answer = self.llm_provider.complete(system_prompt, user_prompt).strip()
+        try:
+            answer = self.llm_provider.complete(system_prompt, user_prompt).strip()
+        except Exception as exc:
+            raise AgentExecutionError() from exc
         return {"answer": answer}
 
 

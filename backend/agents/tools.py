@@ -5,9 +5,10 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
 
+from backend.common.exceptions import ToolExecutionError
 from backend.repositories.transactions import TransactionRepository
 from backend.services.analytics import AnalyticsService
 
@@ -108,9 +109,14 @@ class FinanceTools:
 
         tool = self._tools.get(name)
         if tool is None:
-            raise ValueError(f"Unknown finance tool requested: {name}")
-        args = tool.args_schema.model_validate(raw_args)
-        return tool.handler(**args.model_dump())
+            raise ToolExecutionError(f"Unknown finance tool requested: {name}")
+        try:
+            args = tool.args_schema.model_validate(raw_args)
+            return tool.handler(**args.model_dump())
+        except ValidationError as exc:
+            raise ToolExecutionError(f"Invalid arguments for finance tool: {name}") from exc
+        except Exception as exc:
+            raise ToolExecutionError(f"Finance tool failed: {name}") from exc
 
     def get_monthly_summary(self) -> list[dict]:
         return self.analytics.monthly_summary()

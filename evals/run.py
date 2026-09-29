@@ -8,7 +8,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from backend.agents.graph import FinanceAgent
 from backend.core.config import settings
 from backend.db.session import SessionLocal, init_database
-from backend.llm.providers import build_llm_provider
+from backend.llm.providers import LLMProviderFactory
 
 
 def main() -> int:
@@ -26,7 +26,7 @@ def main() -> int:
     init_database()
     cases = yaml.safe_load(Path("evals/cases.yaml").read_text())["cases"]
     failures: list[str] = []
-    provider = build_llm_provider(settings)
+    provider = LLMProviderFactory(settings).build()
 
     with SessionLocal() as session:
         agent = FinanceAgent(session, llm_provider=provider)
