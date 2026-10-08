@@ -1,11 +1,11 @@
 from collections.abc import Sequence
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.sql import Select
 from sqlalchemy.orm import Session
 
-from backend.db.models import RawTransaction, StatementImport
+from backend.db.models import CategoryTaxonomy, RawTransaction, StatementImport, TransactionCategorization
 
 
 class TransactionRepository:
@@ -31,6 +31,31 @@ class TransactionRepository:
         if query:
             statement = statement.where(func.lower(RawTransaction.description).contains(query.lower()))
         return self.session.scalars(statement.limit(limit)).all()
+
+    def list_transaction_details(
+        self,
+        limit: int = 100,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        query: str | None = None,
+    ) -> Sequence[tuple[RawTransaction, TransactionCategorization | None, CategoryTaxonomy | None]]:
+        active_category = and_(
+            TransactionCategorization.transaction_id == RawTransaction.id,
+            TransactionCategorization.status == "active",
+        )
+        statement = (
+            select(RawTransaction, TransactionCategorization, CategoryTaxonomy)
+            .outerjoin(TransactionCategorization, active_category)
+            .outerjoin(CategoryTaxonomy, CategoryTaxonomy.category_id == TransactionCategorization.category_id)
+            .order_by(RawTransaction.posted_date.desc(), RawTransaction.created_at.desc())
+        )
+        if start_date:
+            statement = statement.where(RawTransaction.posted_date >= start_date)
+        if end_date:
+            statement = statement.where(RawTransaction.posted_date <= end_date)
+        if query:
+            statement = statement.where(func.lower(RawTransaction.description).contains(query.lower()))
+        return self.session.execute(statement.limit(limit)).all()
 
     def get_largest(self, limit: int = 10) -> Sequence[RawTransaction]:
         return self.session.scalars(

@@ -19,3 +19,8 @@ sources:
               - accepted_values:
                   arguments:
                     values: ["credit", "debit"]
+  - name: enrichment
+    schema: enrichment
+    tables:
+      - name: category_taxonomy
+      - name: transaction_categorizations
