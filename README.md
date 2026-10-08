@@ -48,6 +48,30 @@ docker compose exec backend dbt test --project-dir /app/dbt --profiles-dir /app/
 docker compose exec backend python /app/evals/run.py
 ```
 
+## Categorization Pipeline
+
+Transactions are imported into `raw.statement_transactions` unchanged. The
+backend enriches them through a fixed category taxonomy, merchant aliases, user
+corrections, and optional LLM categorization for unknown merchants. dbt consumes
+the completed enrichment rows and rebuilds analytics tables from deterministic
+joins.
+
+Useful local endpoints:
+
+```bash
+curl -X POST http://localhost:8000/categorization/apply-known
+curl -X POST http://localhost:8000/categorization/categorize-unknowns
+curl http://localhost:8000/categorization/categories
+curl http://localhost:8000/categorization/jobs
+```
+
+Useful database checks:
+
+```bash
+docker compose exec postgres psql -U finance_guardian -d finance_guardian -c "\dt enrichment.*"
+docker compose exec postgres psql -U finance_guardian -d finance_guardian -c "select source, status, category_id, count(*) from enrichment.transaction_categorizations group by 1, 2, 3;"
+```
+
 ## Agent Configuration
 
 The app does not provide mock chat answers. Configure Claude before using

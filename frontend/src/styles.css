@@ -13,7 +13,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -78,6 +79,19 @@ small {
   margin-bottom: 14px;
 }
 
+.sectionHeader {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .iconButton {
   align-items: center;
   background: #164b60;
@@ -91,13 +105,27 @@ small {
   width: 38px;
 }
 
+.actionButton {
+  align-items: center;
+  background: #164b60;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
 .agentRow {
   display: grid;
   gap: 8px;
   grid-template-columns: minmax(0, 1fr) 38px;
 }
 
-input {
+input,
+select {
   border: 1px solid #cbd5dc;
   border-radius: 6px;
   min-width: 0;
@@ -128,6 +156,35 @@ input {
   font-size: 22px;
 }
 
+.jobGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin-top: 14px;
+}
+
+.jobSubhead {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.job {
+  border: 1px solid #dbe3e8;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.job span {
+  color: #164b60;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .table {
   display: grid;
   gap: 8px;
@@ -139,14 +196,28 @@ input {
   border-bottom: 1px solid #edf1f4;
   display: grid;
   gap: 10px;
-  grid-template-columns: 110px minmax(0, 1fr) 80px 100px;
+  grid-template-columns: 105px minmax(130px, 0.8fr) minmax(180px, 1.4fr) minmax(160px, 0.9fr) 80px 100px;
   min-height: 42px;
 }
 
-.tableRow span:nth-child(2) {
+.tableHead {
+  color: #62707a;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 28px;
+  text-transform: uppercase;
+}
+
+.tableRow span:nth-child(2),
+.tableRow span:nth-child(3) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tableRow select {
+  min-height: 34px;
+  padding: 6px 8px;
 }
 
 @media (max-width: 760px) {
@@ -155,15 +226,21 @@ input {
   }
 
   .grid,
-  .topbar {
-    grid-template-columns: 1fr;
+  .topbar,
+  .sectionHeader {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .grid {
-    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .tableRow {
     grid-template-columns: 1fr;
+  }
+
+  .tableHead {
+    display: none;
   }
 }

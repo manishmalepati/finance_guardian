@@ -7,6 +7,7 @@ from backend.common.exceptions import IngestionError
 from backend.db.models import RawTransaction, StatementImport
 from backend.ingestion.adapters.factory import AdapterFactory
 from backend.repositories.transactions import TransactionRepository
+from backend.services.categorization import CategorizationService
 
 
 class IngestionService:
@@ -54,6 +55,8 @@ class IngestionService:
                         row_number=parsed.row_number,
                     )
                 )
+            self.session.flush()
+            categorization_result = CategorizationService(self.session).apply_known_aliases_and_queue_unknowns(commit=False)
             self.session.commit()
         except IngestionError:
             self.session.rollback()
@@ -69,4 +72,6 @@ class IngestionService:
             "import_id": statement_import.id,
             "status": "completed",
             "transactions_imported": len(parsed_transactions),
+            "transactions_categorized": categorization_result["transactions_categorized"],
+            "unknown_merchants_queued": categorization_result["unknown_merchants_queued"],
         }

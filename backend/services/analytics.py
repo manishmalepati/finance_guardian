@@ -1,10 +1,10 @@
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import case, extract, func, select
+from sqlalchemy import and_, case, extract, func, select
 from sqlalchemy.orm import Session
 
-from backend.db.models import RawTransaction
+from backend.db.models import CategoryTaxonomy, RawTransaction, TransactionCategorization
 
 
 class AnalyticsService:
@@ -33,10 +33,16 @@ class AnalyticsService:
         return [self._row_to_dict(row) for row in rows]
 
     def category_spending(self, start_date: date | None = None, end_date: date | None = None) -> list[dict]:
+        active_category = and_(
+            TransactionCategorization.transaction_id == RawTransaction.id,
+            TransactionCategorization.status == "active",
+        )
         statement = select(
-            func.coalesce(RawTransaction.category_hint, "Uncategorized").label("category"),
+            func.coalesce(CategoryTaxonomy.display_name, "Uncategorized").label("category"),
             func.sum(RawTransaction.amount).label("amount"),
             func.count().label("transaction_count"),
+        ).outerjoin(TransactionCategorization, active_category).outerjoin(
+            CategoryTaxonomy, CategoryTaxonomy.category_id == TransactionCategorization.category_id
         ).where(RawTransaction.direction == "debit")
         if start_date:
             statement = statement.where(RawTransaction.posted_date >= start_date)
@@ -46,18 +52,28 @@ class AnalyticsService:
         return [self._row_to_dict(row) for row in rows]
 
     def largest_transactions(self, limit: int = 10) -> list[dict]:
-        rows = self.session.scalars(
-            select(RawTransaction).order_by(RawTransaction.amount.desc()).limit(limit)
+        active_category = and_(
+            TransactionCategorization.transaction_id == RawTransaction.id,
+            TransactionCategorization.status == "active",
+        )
+        rows = self.session.execute(
+            select(RawTransaction, TransactionCategorization, CategoryTaxonomy)
+            .outerjoin(TransactionCategorization, active_category)
+            .outerjoin(CategoryTaxonomy, CategoryTaxonomy.category_id == TransactionCategorization.category_id)
+            .order_by(RawTransaction.amount.desc())
+            .limit(limit)
         ).all()
         return [
             {
-                "id": row.id,
-                "posted_date": row.posted_date.isoformat(),
-                "description": row.description,
-                "amount": row.amount,
-                "direction": row.direction,
+                "id": transaction.id,
+                "posted_date": transaction.posted_date.isoformat(),
+                "description": transaction.description,
+                "amount": transaction.amount,
+                "direction": transaction.direction,
+                "merchant": categorization.canonical_merchant_name if categorization else None,
+                "category": category.display_name if category else "Uncategorized",
             }
-            for row in rows
+            for transaction, categorization, category in rows
         ]
 
     @staticmethod

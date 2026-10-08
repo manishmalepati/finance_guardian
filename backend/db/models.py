@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -47,3 +47,77 @@ class RawTransaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     statement_import: Mapped[StatementImport] = relationship(back_populates="transactions")
+
+
+class CategoryTaxonomy(Base):
+    __tablename__ = "category_taxonomy"
+    __table_args__ = {"schema": "enrichment"}
+
+    category_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class MerchantAlias(Base):
+    __tablename__ = "merchant_aliases"
+    __table_args__ = (
+        UniqueConstraint("normalized_pattern", name="uq_merchant_alias_normalized_pattern"),
+        {"schema": "enrichment"},
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    normalized_pattern: Mapped[str] = mapped_column(String(255), nullable=False)
+    canonical_merchant_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    category_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("enrichment.category_taxonomy.category_id"), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(30), nullable=False)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False, default=Decimal("1.000"))
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class CategorizationJob(Base):
+    __tablename__ = "categorization_jobs"
+    __table_args__ = (
+        UniqueConstraint("normalized_merchant", name="uq_categorization_job_normalized_merchant"),
+        {"schema": "enrichment"},
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    normalized_merchant: Mapped[str] = mapped_column(String(255), nullable=False)
+    example_descriptions: Mapped[str] = mapped_column(Text, nullable=False)
+    transaction_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class TransactionCategorization(Base):
+    __tablename__ = "transaction_categorizations"
+    __table_args__ = {"schema": "enrichment"}
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    transaction_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("raw.statement_transactions.id"), nullable=False
+    )
+    normalized_merchant: Mapped[str] = mapped_column(String(255), nullable=False)
+    canonical_merchant_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    category_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("enrichment.category_taxonomy.category_id"), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(30), nullable=False)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False, default=Decimal("1.000"))
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

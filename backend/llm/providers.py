@@ -37,7 +37,7 @@ class LLMProviderFactory:
     def __init__(self, app_settings: Settings = settings):
         self.settings = app_settings
 
-    def build(self) -> LLMProvider:
+    def build(self, max_tokens: int = 300) -> LLMProvider:
         """Build the configured provider without falling back to a mock."""
 
         provider = self.settings.llm_provider.strip().lower()
@@ -46,4 +46,5 @@ class LLMProviderFactory:
         return AnthropicProvider(
             api_key=self.settings.anthropic_api_key,
             model=self.settings.llm_model,
+            max_tokens=max_tokens,
         )

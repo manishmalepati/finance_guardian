@@ -132,16 +132,18 @@ class FinanceTools:
         return self.analytics.largest_transactions(limit=limit)
 
     def search_transactions(self, query: str, limit: int = 20) -> list[dict]:
-        rows = self.transactions.list_transactions(query=query, limit=limit)
+        rows = self.transactions.list_transaction_details(query=query, limit=limit)
         return [
             {
-                "id": row.id,
-                "posted_date": row.posted_date.isoformat(),
-                "description": row.description,
-                "amount": row.amount,
-                "direction": row.direction,
+                "id": transaction.id,
+                "posted_date": transaction.posted_date.isoformat(),
+                "description": transaction.description,
+                "amount": transaction.amount,
+                "direction": transaction.direction,
+                "merchant": categorization.canonical_merchant_name if categorization else None,
+                "category": category.display_name if category else "Uncategorized",
             }
-            for row in rows
+            for transaction, categorization, category in rows
         ]
 
 
