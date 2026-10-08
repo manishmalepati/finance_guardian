@@ -9,7 +9,10 @@ models:
           - not_null
   - name: mart_category_spending
     columns:
-      - name: category
+      - name: parent_category
+        tests:
+          - not_null
+      - name: subcategory
         tests:
           - not_null
       - name: month

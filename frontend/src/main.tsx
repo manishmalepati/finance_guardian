@@ -15,6 +15,10 @@ type Transaction = {
   category_hint: string | null;
   category_id: string | null;
   category_name: string;
+  parent_category_id: string | null;
+  parent_category_name: string;
+  subcategory_id: string | null;
+  subcategory_name: string | null;
   canonical_merchant_name: string | null;
   categorization_source: string | null;
   categorization_confidence: string | null;
@@ -32,6 +36,10 @@ type MonthlySummary = {
 type Category = {
   category_id: string;
   display_name: string;
+  subcategories: {
+    category_id: string;
+    display_name: string;
+  }[];
 };
 
 type CategorizationJob = {
@@ -274,14 +282,18 @@ function App() {
               <span>{transaction.canonical_merchant_name ?? "Unknown"}</span>
               <span>{transaction.description}</span>
               <select
-                value={transaction.category_id ?? ""}
+                value={transaction.subcategory_id ?? ""}
                 onChange={(event) => updateTransactionCategory(transaction.id, event.target.value)}
               >
                 <option value="">Uncategorized</option>
                 {categories.map((category) => (
-                  <option key={category.category_id} value={category.category_id}>
-                    {category.display_name}
-                  </option>
+                  <optgroup key={category.category_id} label={category.display_name}>
+                    {category.subcategories.map((subcategory) => (
+                      <option key={subcategory.category_id} value={subcategory.category_id}>
+                        {subcategory.display_name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
               <span>{transaction.categorization_source ?? "none"}</span>

@@ -21,7 +21,7 @@ def list_transactions(
         limit=limit, start_date=start_date, end_date=end_date, query=query
     )
     output = []
-    for transaction, categorization, category in rows:
+    for transaction, categorization, category, parent_category in rows:
         output.append(
             {
                 "id": transaction.id,
@@ -32,7 +32,11 @@ def list_transactions(
                 "account_name": transaction.account_name,
                 "category_hint": transaction.category_hint,
                 "category_id": categorization.category_id if categorization else None,
-                "category_name": category.display_name if category else "Uncategorized",
+                "category_name": parent_category.display_name if parent_category else "Uncategorized",
+                "parent_category_id": parent_category.category_id if parent_category else None,
+                "parent_category_name": parent_category.display_name if parent_category else "Uncategorized",
+                "subcategory_id": category.category_id if category else None,
+                "subcategory_name": category.display_name if category else None,
                 "canonical_merchant_name": categorization.canonical_merchant_name if categorization else None,
                 "categorization_source": categorization.source if categorization else None,
                 "categorization_confidence": categorization.confidence if categorization else None,

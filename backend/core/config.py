@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     llm_provider: str = ""
     llm_model: str = ""
     anthropic_api_key: str = ""
+    anthropic_workspace_id: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

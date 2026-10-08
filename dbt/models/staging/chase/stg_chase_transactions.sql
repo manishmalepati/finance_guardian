@@ -18,8 +18,10 @@ select
     t.amount,
     t.direction,
     t.account_name,
-    coalesce(c.category_id, 'uncategorized') as category_id,
-    coalesce(ct.display_name, 'Uncategorized') as category,
+    coalesce(c.category_id, 'other_uncategorized') as category_id,
+    coalesce(ct.display_name, 'Uncategorized') as subcategory,
+    coalesce(parent_ct.category_id, 'other') as parent_category_id,
+    coalesce(parent_ct.display_name, 'Other') as parent_category,
     c.normalized_merchant,
     coalesce(c.canonical_merchant_name, trim(t.description)) as merchant_name,
     c.categorization_source,
@@ -31,4 +33,5 @@ select
 from {{ source('raw', 'statement_transactions') }} t
 left join active_categorizations c on c.transaction_id = t.id
 left join {{ source('enrichment', 'category_taxonomy') }} ct on ct.category_id = c.category_id
+left join {{ source('enrichment', 'category_taxonomy') }} parent_ct on parent_ct.category_id = ct.parent_category_id
 where t.source = 'chase_pdf'

@@ -3,7 +3,7 @@ from datetime import date
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.sql import Select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from backend.db.models import CategoryTaxonomy, RawTransaction, StatementImport, TransactionCategorization
 
@@ -38,15 +38,17 @@ class TransactionRepository:
         start_date: date | None = None,
         end_date: date | None = None,
         query: str | None = None,
-    ) -> Sequence[tuple[RawTransaction, TransactionCategorization | None, CategoryTaxonomy | None]]:
+    ) -> Sequence[tuple[RawTransaction, TransactionCategorization | None, CategoryTaxonomy | None, CategoryTaxonomy | None]]:
         active_category = and_(
             TransactionCategorization.transaction_id == RawTransaction.id,
             TransactionCategorization.status == "active",
         )
+        parent_category = aliased(CategoryTaxonomy)
         statement = (
-            select(RawTransaction, TransactionCategorization, CategoryTaxonomy)
+            select(RawTransaction, TransactionCategorization, CategoryTaxonomy, parent_category)
             .outerjoin(TransactionCategorization, active_category)
             .outerjoin(CategoryTaxonomy, CategoryTaxonomy.category_id == TransactionCategorization.category_id)
+            .outerjoin(parent_category, parent_category.category_id == CategoryTaxonomy.parent_category_id)
             .order_by(RawTransaction.posted_date.desc(), RawTransaction.created_at.desc())
         )
         if start_date:

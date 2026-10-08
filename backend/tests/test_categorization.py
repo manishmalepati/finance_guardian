@@ -11,8 +11,8 @@ def test_normalizer_removes_statement_noise():
 def test_extract_json_accepts_fenced_response():
     payload = _extract_json(
         """```json
-        {"results": [{"normalized_merchant": "uber eats", "category_id": "food_delivery"}]}
+        {"results": [{"normalized_merchant": "uber eats", "category_id": "food_prepared"}]}
         ```"""
     )
 
-    assert payload["results"][0]["category_id"] == "food_delivery"
+    assert payload["results"][0]["category_id"] == "food_prepared"

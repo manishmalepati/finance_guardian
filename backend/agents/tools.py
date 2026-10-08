@@ -141,9 +141,10 @@ class FinanceTools:
                 "amount": transaction.amount,
                 "direction": transaction.direction,
                 "merchant": categorization.canonical_merchant_name if categorization else None,
-                "category": category.display_name if category else "Uncategorized",
+                "category": parent_category.display_name if parent_category else "Uncategorized",
+                "subcategory": category.display_name if category else None,
             }
-            for transaction, categorization, category in rows
+            for transaction, categorization, category, parent_category in rows
         ]
 
 

@@ -2,6 +2,7 @@ select
     transaction_id,
     md5(account_name) as account_id,
     category_id,
+    parent_category_id,
     md5(upper(merchant_name)) as merchant_id,
     posted_date,
     description,
