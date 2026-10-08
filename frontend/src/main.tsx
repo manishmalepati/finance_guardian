@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Bot, FileUp, RefreshCw, Search, Sparkles, Tags } from "lucide-react";
+import { Bot, Building2, FileUp, RefreshCw, Search, Sparkles, Tags } from "lucide-react";
 import "./styles.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -58,30 +58,76 @@ type CategorizationSummary = {
   jobs: Record<string, number>;
 };
 
+type PlaidAccount = {
+  account_id: string;
+  name: string;
+  official_name: string | null;
+  mask: string | null;
+  type: string | null;
+  subtype: string | null;
+  available_balance: string | null;
+  current_balance: string | null;
+  iso_currency_code: string | null;
+};
+
+type PlaidItem = {
+  item_id: string;
+  institution_name: string | null;
+  status: string;
+  has_cursor: boolean;
+  accounts: PlaidAccount[];
+};
+
+type PlaidHandler = {
+  open: () => void;
+};
+
+declare global {
+  interface Window {
+    Plaid?: {
+      create: (options: {
+        token: string;
+        onSuccess: (publicToken: string, metadata: Record<string, unknown>) => void;
+        onExit?: (error: unknown) => void;
+      }) => PlaidHandler;
+    };
+  }
+}
+
 function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [jobs, setJobs] = useState<CategorizationJob[]>([]);
   const [categorizationSummary, setCategorizationSummary] = useState<CategorizationSummary | null>(null);
   const [summary, setSummary] = useState<MonthlySummary[]>([]);
+  const [plaidItems, setPlaidItems] = useState<PlaidItem[]>([]);
   const [message, setMessage] = useState("What are my biggest transactions?");
   const [answer, setAnswer] = useState("");
   const [status, setStatus] = useState("");
+  const [isBankBusy, setIsBankBusy] = useState(false);
 
   const refresh = async () => {
-    const [transactionResponse, categoryResponse, jobsResponse, categorizationSummaryResponse, summaryResponse] =
-      await Promise.all([
+    const [
+      transactionResponse,
+      categoryResponse,
+      jobsResponse,
+      categorizationSummaryResponse,
+      summaryResponse,
+      plaidItemsResponse,
+    ] = await Promise.all([
       fetch(`${API_BASE_URL}/transactions?limit=100`),
       fetch(`${API_BASE_URL}/categorization/categories`),
       fetch(`${API_BASE_URL}/categorization/jobs?limit=100`),
       fetch(`${API_BASE_URL}/categorization/summary`),
       fetch(`${API_BASE_URL}/analytics/monthly-summary`),
+      fetch(`${API_BASE_URL}/plaid/items`),
     ]);
     setTransactions(await transactionResponse.json());
     setCategories(await categoryResponse.json());
     setJobs(await jobsResponse.json());
     setCategorizationSummary(await categorizationSummaryResponse.json());
     setSummary(await summaryResponse.json());
+    setPlaidItems(await plaidItemsResponse.json());
   };
 
   useEffect(() => {
@@ -101,6 +147,86 @@ function App() {
     setStatus(
       `${result.status}: ${result.transactions_imported} imported, ${result.transactions_categorized ?? 0} categorized`
     );
+    await refresh();
+  };
+
+  const loadPlaidScript = async () => {
+    if (window.Plaid) return;
+    await new Promise<void>((resolve, reject) => {
+      const existing = document.querySelector<HTMLScriptElement>("script[data-plaid-link]");
+      if (existing) {
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () => reject(new Error("Plaid Link failed to load.")), { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
+      script.async = true;
+      script.dataset.plaidLink = "true";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Plaid Link failed to load."));
+      document.head.appendChild(script);
+    });
+  };
+
+  const connectBank = async () => {
+    setIsBankBusy(true);
+    setStatus("Preparing Plaid Link.");
+    try {
+      await loadPlaidScript();
+      const tokenResponse = await fetch(`${API_BASE_URL}/plaid/link-token`, { method: "POST" });
+      const tokenResult = await tokenResponse.json();
+      if (!tokenResponse.ok || !window.Plaid) {
+        setStatus(tokenResult.detail ?? "Plaid Link could not be started.");
+        return;
+      }
+      const handler = window.Plaid.create({
+        token: tokenResult.link_token,
+        onSuccess: async (publicToken, metadata) => {
+          const exchangeResponse = await fetch(`${API_BASE_URL}/plaid/exchange-public-token`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ public_token: publicToken, metadata }),
+          });
+          const exchangeResult = await exchangeResponse.json();
+          if (!exchangeResponse.ok) {
+            setStatus(exchangeResult.detail ?? "Plaid token exchange failed.");
+            return;
+          }
+          setStatus(`${exchangeResult.institution_name ?? "Bank"} connected. Syncing transactions.`);
+          await syncPlaidTransactions();
+        },
+        onExit: () => setStatus("Plaid Link closed."),
+      });
+      handler.open();
+    } catch {
+      setStatus("Plaid Link could not be loaded.");
+    } finally {
+      setIsBankBusy(false);
+    }
+  };
+
+  const syncPlaidTransactions = async () => {
+    if (plaidItems.length === 0) {
+      setStatus("Connect a bank before syncing transactions.");
+      return;
+    }
+    setIsBankBusy(true);
+    const response = await fetch(`${API_BASE_URL}/plaid/sync-transactions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      setStatus(result.detail ?? "Plaid sync failed.");
+      setIsBankBusy(false);
+      return;
+    }
+    setStatus(
+      `${result.items_synced} bank connection synced, ${result.transactions_added} added, ${result.transactions_modified} updated`
+    );
+    setIsBankBusy(false);
     await refresh();
   };
 
@@ -162,7 +288,7 @@ function App() {
       <header className="topbar">
         <div>
           <h1>Finance Guardian</h1>
-          <p>Local-first transaction import, analytics, and grounded finance chat.</p>
+        <p>Local-first transaction import, analytics, and grounded finance chat.</p>
         </div>
         <button className="iconButton" onClick={refresh} title="Refresh">
           <RefreshCw size={18} />
@@ -172,11 +298,43 @@ function App() {
       <section className="grid">
         <div className="panel">
           <div className="panelHeader">
+            <Building2 size={18} />
+            <h2>Bank Connection</h2>
+          </div>
+          <div className="actions">
+            <button className="actionButton" onClick={connectBank} disabled={isBankBusy}>
+              <Building2 size={16} />
+              Connect bank
+            </button>
+            <button className="actionButton secondaryButton" onClick={syncPlaidTransactions} disabled={isBankBusy}>
+              <RefreshCw size={16} />
+              Sync
+            </button>
+          </div>
+          <div className="accountList">
+            {plaidItems.map((item) => (
+              <div className="accountGroup" key={item.item_id}>
+                <strong>{item.institution_name ?? "Connected institution"}</strong>
+                <small>{item.accounts.length} accounts</small>
+                {item.accounts.slice(0, 4).map((account) => (
+                  <span key={account.account_id}>
+                    {account.name}
+                    {account.mask ? ` - ${account.mask}` : ""}
+                  </span>
+                ))}
+              </div>
+            ))}
+            {plaidItems.length === 0 && <p className="muted">No bank connections yet.</p>}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panelHeader">
             <FileUp size={18} />
-            <h2>Import</h2>
+            <h2>Statement Upload</h2>
           </div>
           <input type="file" accept="application/pdf" onChange={uploadStatement} />
-          <p className="status">{status || "Upload a Chase PDF statement to start."}</p>
+          <p className="status">{status || "Connect a bank or upload a Chase PDF statement to start."}</p>
         </div>
 
         <div className="panel">

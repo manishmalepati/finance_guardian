@@ -8,9 +8,9 @@ and ask grounded finance questions over local data.
 The first phase is a local-first modular monolith:
 
 - `frontend`: React + TypeScript dashboard.
-- `backend`: FastAPI, ingestion, analytics services, LangGraph agent, dbt CLI.
+- `backend`: FastAPI, Plaid ingestion, statement ingestion, analytics services, LangGraph agent, dbt CLI.
 - `postgres`: durable local database backed by a Docker named volume.
-- `dbt`: raw -> staging -> core -> marts transformations.
+- `dbt`: raw -> staging -> core -> marts transformations over source-agnostic transactions.
 - `evals`: small live-agent eval suite for tool choice and grounded responses.
 
 The agent is intentionally bounded: it routes finance questions to approved tools,
@@ -39,6 +39,36 @@ Open:
 Postgres data persists in the `postgres_data` Docker volume. `docker compose down`
 keeps data; `docker compose down -v` removes it.
 
+The current raw model is intentionally source-agnostic:
+
+- `raw.ingestion_runs`: one local ingest/sync event from Plaid or statement upload.
+- `raw.plaid_items`: Plaid Item state, including the server-only access token and sync cursor.
+- `raw.financial_accounts`: source account metadata normalized across providers.
+- `raw.transactions`: canonical raw transactions consumed by categorization, dbt, analytics, and the agent.
+
+For a clean local rebuild after schema changes:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+## Plaid Configuration
+
+Plaid is the primary ingestion path. Statement upload remains as a fallback.
+
+```bash
+PLAID_CLIENT_ID=your_client_id
+PLAID_SECRET=your_sandbox_secret
+PLAID_ENV=sandbox
+PLAID_PRODUCTS=transactions
+PLAID_COUNTRY_CODES=US
+PLAID_CLIENT_NAME=Finance Guardian
+```
+
+Sandbox test credentials can be used through Plaid Link. For production hardening,
+encrypt Plaid access tokens before storing them outside a local development database.
+
 ## Useful Commands
 
 ```bash
@@ -50,7 +80,7 @@ docker compose exec backend python /app/evals/run.py
 
 ## Categorization Pipeline
 
-Transactions are imported into `raw.statement_transactions` unchanged. The
+Transactions are imported into `raw.transactions` unchanged. The
 backend enriches them through a fixed category taxonomy, merchant aliases, user
 corrections, and optional LLM categorization for unknown merchants. dbt consumes
 the completed enrichment rows and rebuilds analytics tables from deterministic

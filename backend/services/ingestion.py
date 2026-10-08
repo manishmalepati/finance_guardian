@@ -4,7 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.common.exceptions import IngestionError
-from backend.db.models import RawTransaction, StatementImport
+from backend.db.models import IngestionRun, RawTransaction
 from backend.ingestion.adapters.factory import AdapterFactory
 from backend.repositories.transactions import TransactionRepository
 from backend.services.categorization import CategorizationService
@@ -22,7 +22,7 @@ class IngestionService:
         """Import one statement file if its content hash has not been seen."""
 
         file_hash = hashlib.sha256(content).hexdigest()
-        existing = self.repository.find_import_by_hash(file_hash)
+        existing = self.repository.find_ingestion_run_by_fingerprint(file_hash)
         if existing:
             return {
                 "import_id": existing.id,
@@ -34,15 +34,15 @@ class IngestionService:
             adapter = self.adapter_factory.for_source(source)
             parsed_transactions = adapter.parse(content)
 
-            statement_import = StatementImport(source=source, filename=filename, file_hash=file_hash)
-            self.session.add(statement_import)
+            ingestion_run = IngestionRun(source=source, filename=filename, source_fingerprint=file_hash)
+            self.session.add(ingestion_run)
             self.session.flush()
 
             for index, parsed in enumerate(parsed_transactions, start=1):
-                source_key = f"{parsed.posted_date.isoformat()}|{parsed.description}|{parsed.amount}|{index}"
+                source_key = f"{file_hash}|{index}|{parsed.posted_date.isoformat()}|{parsed.description}|{parsed.amount}"
                 self.session.add(
                     RawTransaction(
-                        statement_import_id=statement_import.id,
+                        ingestion_run_id=ingestion_run.id,
                         source=source,
                         source_transaction_key=source_key,
                         posted_date=parsed.posted_date,
@@ -69,7 +69,7 @@ class IngestionService:
             raise IngestionError("Statement import failed while parsing the statement.") from exc
 
         return {
-            "import_id": statement_import.id,
+            "import_id": ingestion_run.id,
             "status": "completed",
             "transactions_imported": len(parsed_transactions),
             "transactions_categorized": categorization_result["transactions_categorized"],

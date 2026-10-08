@@ -29,6 +29,12 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
+      PLAID_SECRET: ${PLAID_SECRET:-}
+      PLAID_ENV: ${PLAID_ENV:-sandbox}
+      PLAID_PRODUCTS: ${PLAID_PRODUCTS:-transactions}
+      PLAID_COUNTRY_CODES: ${PLAID_COUNTRY_CODES:-US}
+      PLAID_CLIENT_NAME: ${PLAID_CLIENT_NAME:-Finance Guardian}
     volumes:
       - ./backend:/app/backend
       - ./dbt:/app/dbt

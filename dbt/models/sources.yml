@@ -4,8 +4,10 @@ sources:
   - name: raw
     schema: raw
     tables:
-      - name: statement_imports
-      - name: statement_transactions
+      - name: ingestion_runs
+      - name: financial_accounts
+      - name: plaid_items
+      - name: transactions
         columns:
           - name: id
             tests:

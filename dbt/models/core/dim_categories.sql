@@ -3,4 +3,4 @@ select distinct
     subcategory,
     parent_category_id,
     parent_category
-from {{ ref('stg_chase_transactions') }}
+from {{ ref('stg_transactions') }}
