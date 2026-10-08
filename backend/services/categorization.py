@@ -27,36 +27,146 @@ logger = logging.getLogger(__name__)
 
 
 CATEGORY_TAXONOMY = [
-    ("income", "Income"),
-    ("groceries", "Groceries"),
-    ("restaurants", "Restaurants"),
-    ("food_delivery", "Food Delivery"),
-    ("transportation", "Transportation"),
-    ("gas", "Gas"),
-    ("shopping", "Shopping"),
-    ("entertainment", "Entertainment"),
-    ("subscriptions", "Subscriptions"),
-    ("utilities", "Utilities"),
-    ("rent_housing", "Rent & Housing"),
-    ("health", "Health"),
-    ("travel", "Travel"),
-    ("education", "Education"),
-    ("fees_interest", "Fees & Interest"),
-    ("transfers", "Transfers"),
-    ("cash_atm", "Cash & ATM"),
-    ("other", "Other"),
+    {
+        "category_id": "income",
+        "display_name": "Income",
+        "subcategories": [
+            ("income_salary", "Salary"),
+            ("income_interest_dividends", "Interest & Dividends"),
+            ("income_refunds_reimbursements", "Refunds & Reimbursements"),
+            ("income_other", "Other Income"),
+        ],
+    },
+    {
+        "category_id": "food_dining",
+        "display_name": "Food & Dining",
+        "subcategories": [
+            ("food_groceries", "Groceries"),
+            ("food_prepared", "Restaurants & Prepared Food"),
+            ("food_bars_alcohol", "Bars & Alcohol"),
+        ],
+    },
+    {
+        "category_id": "housing",
+        "display_name": "Housing",
+        "subcategories": [
+            ("housing_rent_mortgage", "Rent & Mortgage"),
+            ("housing_utilities", "Utilities"),
+            ("housing_internet_phone", "Internet & Phone"),
+            ("housing_maintenance", "Home Maintenance"),
+            ("housing_supplies", "Home Supplies"),
+        ],
+    },
+    {
+        "category_id": "transportation",
+        "display_name": "Transportation",
+        "subcategories": [
+            ("transport_fuel", "Fuel"),
+            ("transport_rideshare_taxi", "Rideshare & Taxi"),
+            ("transport_public_transit", "Public Transit"),
+            ("transport_parking_tolls", "Parking & Tolls"),
+            ("transport_vehicle_maintenance", "Vehicle Maintenance"),
+            ("transport_vehicle_insurance", "Vehicle Insurance"),
+        ],
+    },
+    {
+        "category_id": "shopping",
+        "display_name": "Shopping",
+        "subcategories": [
+            ("shopping_general", "General Merchandise"),
+            ("shopping_clothing", "Clothing"),
+            ("shopping_electronics", "Electronics"),
+            ("shopping_personal_care", "Personal Care"),
+            ("shopping_home_goods", "Home Goods"),
+        ],
+    },
+    {
+        "category_id": "health",
+        "display_name": "Health",
+        "subcategories": [
+            ("health_medical", "Medical"),
+            ("health_pharmacy", "Pharmacy"),
+            ("health_dental_vision", "Dental & Vision"),
+            ("health_fitness", "Fitness"),
+        ],
+    },
+    {
+        "category_id": "entertainment",
+        "display_name": "Entertainment",
+        "subcategories": [
+            ("entertainment_events", "Events & Venues"),
+            ("entertainment_digital", "Digital Entertainment"),
+            ("entertainment_hobbies", "Hobbies"),
+        ],
+    },
+    {
+        "category_id": "subscriptions",
+        "display_name": "Subscriptions",
+        "subcategories": [
+            ("subscriptions_streaming", "Streaming"),
+            ("subscriptions_software", "Software"),
+            ("subscriptions_memberships", "Memberships"),
+        ],
+    },
+    {
+        "category_id": "travel",
+        "display_name": "Travel",
+        "subcategories": [
+            ("travel_flights", "Flights"),
+            ("travel_lodging", "Lodging"),
+            ("travel_rental_cars", "Rental Cars"),
+            ("travel_ground_transport", "Ground Transportation"),
+            ("travel_activities", "Travel Activities"),
+        ],
+    },
+    {
+        "category_id": "financial",
+        "display_name": "Financial",
+        "subcategories": [
+            ("financial_credit_card_payment", "Credit Card Payments"),
+            ("financial_transfers", "Transfers"),
+            ("financial_fees_interest", "Fees & Interest"),
+            ("financial_cash_atm", "Cash & ATM"),
+            ("financial_taxes", "Taxes"),
+        ],
+    },
+    {
+        "category_id": "education",
+        "display_name": "Education",
+        "subcategories": [
+            ("education_tuition", "Tuition"),
+            ("education_courses", "Courses"),
+            ("education_books_supplies", "Books & Supplies"),
+        ],
+    },
+    {
+        "category_id": "gifts_donations",
+        "display_name": "Gifts & Donations",
+        "subcategories": [
+            ("gifts_donations_gifts", "Gifts"),
+            ("gifts_donations_charity", "Charity"),
+        ],
+    },
+    {
+        "category_id": "other",
+        "display_name": "Other",
+        "subcategories": [
+            ("other_uncategorized", "Uncategorized"),
+            ("other_misc", "Other"),
+        ],
+    },
 ]
 
 
 SEED_ALIASES = [
-    ("uber eats", "Uber Eats", "food_delivery"),
-    ("doordash", "DoorDash", "food_delivery"),
-    ("uber trip", "Uber", "transportation"),
-    ("lyft", "Lyft", "transportation"),
-    ("wal mart", "Walmart", "shopping"),
-    ("walmart", "Walmart", "shopping"),
-    ("regal cinemas", "Regal Cinemas", "entertainment"),
-    ("payment thank you", "Credit Card Payment", "transfers"),
+    ("uber eats", "Uber Eats", "food_prepared"),
+    ("doordash", "DoorDash", "food_prepared"),
+    ("uber trip", "Uber", "transport_rideshare_taxi"),
+    ("lyft", "Lyft", "transport_rideshare_taxi"),
+    ("wal mart", "Walmart", "shopping_general"),
+    ("walmart", "Walmart", "shopping_general"),
+    ("regal cinemas", "Regal Cinemas", "entertainment_events"),
+    ("payment thank you", "Credit Card Payment", "financial_credit_card_payment"),
 ]
 
 
@@ -104,17 +214,76 @@ class CategorizationService:
         self.llm_provider = llm_provider
 
     def seed_defaults(self) -> None:
-        existing_categories = set(self.session.scalars(select(CategoryTaxonomy.category_id)).all())
-        for index, (category_id, display_name) in enumerate(CATEGORY_TAXONOMY, start=1):
-            if category_id not in existing_categories:
-                self.session.add(
-                    CategoryTaxonomy(category_id=category_id, display_name=display_name, sort_order=index)
-                )
+        default_category_ids = {
+            parent["category_id"]
+            for parent in CATEGORY_TAXONOMY
+        } | {
+            category_id
+            for parent in CATEGORY_TAXONOMY
+            for category_id, _ in parent["subcategories"]
+        }
+        existing_categories = {
+            category.category_id: category
+            for category in self.session.scalars(select(CategoryTaxonomy)).all()
+        }
+        for category in existing_categories.values():
+            if category.category_id not in default_category_ids:
+                category.is_active = False
 
-        existing_aliases = set(self.session.scalars(select(MerchantAlias.normalized_pattern)).all())
+        sort_order = 1
+        for parent_index, parent in enumerate(CATEGORY_TAXONOMY, start=1):
+            parent_id = parent["category_id"]
+            existing_parent = existing_categories.get(parent_id)
+            if existing_parent:
+                existing_parent.parent_category_id = None
+                existing_parent.display_name = parent["display_name"]
+                existing_parent.level = 1
+                existing_parent.sort_order = sort_order
+                existing_parent.is_active = True
+            else:
+                self.session.add(
+                    CategoryTaxonomy(
+                        category_id=parent_id,
+                        parent_category_id=None,
+                        display_name=parent["display_name"],
+                        level=1,
+                        sort_order=sort_order,
+                    )
+                )
+            sort_order += 1
+            for child_index, (category_id, display_name) in enumerate(parent["subcategories"], start=1):
+                existing_child = existing_categories.get(category_id)
+                if existing_child:
+                    existing_child.parent_category_id = parent_id
+                    existing_child.display_name = display_name
+                    existing_child.level = 2
+                    existing_child.sort_order = parent_index * 100 + child_index
+                    existing_child.is_active = True
+                else:
+                    self.session.add(
+                        CategoryTaxonomy(
+                            category_id=category_id,
+                            parent_category_id=parent_id,
+                            display_name=display_name,
+                            level=2,
+                            sort_order=parent_index * 100 + child_index,
+                        )
+                    )
+
+        existing_aliases = {
+            alias.normalized_pattern: alias
+            for alias in self.session.scalars(select(MerchantAlias)).all()
+        }
         for pattern, merchant_name, category_id in SEED_ALIASES:
             normalized_pattern = self.normalizer.normalize(pattern)
-            if normalized_pattern not in existing_aliases:
+            existing_alias = existing_aliases.get(normalized_pattern)
+            if existing_alias:
+                existing_alias.canonical_merchant_name = merchant_name
+                existing_alias.category_id = category_id
+                existing_alias.source = "seed"
+                existing_alias.confidence = Decimal("1.000")
+                existing_alias.status = "active"
+            else:
                 self.session.add(
                     MerchantAlias(
                         normalized_pattern=normalized_pattern,
@@ -132,12 +301,26 @@ class CategorizationService:
             .where(CategoryTaxonomy.is_active.is_(True))
             .order_by(CategoryTaxonomy.sort_order)
         ).all()
+        children_by_parent: dict[str, list[CategoryTaxonomy]] = defaultdict(list)
+        parents = []
+        for row in rows:
+            if row.parent_category_id:
+                children_by_parent[row.parent_category_id].append(row)
+            else:
+                parents.append(row)
         return [
             {
-                "category_id": row.category_id,
-                "display_name": row.display_name,
+                "category_id": parent.category_id,
+                "display_name": parent.display_name,
+                "subcategories": [
+                    {
+                        "category_id": child.category_id,
+                        "display_name": child.display_name,
+                    }
+                    for child in children_by_parent[parent.category_id]
+                ],
             }
-            for row in rows
+            for parent in parents
         ]
 
     def summary(self) -> dict:
@@ -238,7 +421,11 @@ class CategorizationService:
 
         categories = self.list_categories()
         results = self._llm_categorize_jobs(jobs=jobs, categories=categories)
-        valid_categories = {category["category_id"] for category in categories}
+        valid_categories = {
+            subcategory["category_id"]
+            for category in categories
+            for subcategory in category["subcategories"]
+        }
         aliases_created = 0
 
         for job in jobs:
@@ -469,6 +656,8 @@ class CategorizationService:
         category = self.session.get(CategoryTaxonomy, category_id)
         if category is None or not category.is_active:
             raise ValueError(f"Unknown category_id: {category_id}")
+        if category.parent_category_id is None:
+            raise ValueError(f"Category must be a subcategory: {category_id}")
 
     def _title_from_normalized(self, normalized: str) -> str:
         return normalized.title() if normalized else "Unknown Merchant"
@@ -476,8 +665,8 @@ class CategorizationService:
     def _llm_categorize_jobs(self, jobs: list[CategorizationJob], categories: list[dict]) -> dict[str, dict[str, Any]]:
         system_prompt = (
             "You categorize personal finance merchants. Return only valid JSON. "
-            "Choose category_id only from the supplied taxonomy. Do not invent categories. "
-            "Keep merchant names short and return one result per merchant."
+            "Choose category_id only from the supplied subcategories. Do not return parent category IDs "
+            "and do not invent categories. Keep merchant names short and return one result per merchant."
         )
         user_prompt = json.dumps(
             {

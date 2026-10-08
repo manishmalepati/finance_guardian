@@ -8,12 +8,15 @@ from backend.llm.base import LLMProvider
 class AnthropicProvider:
     """Claude-backed provider used by the Finance Guardian agent."""
 
-    def __init__(self, api_key: str, model: str, max_tokens: int = 300):
+    def __init__(self, api_key: str, model: str, max_tokens: int = 300, workspace_id: str = ""):
         from anthropic import Anthropic
 
         self.model = model
         self.max_tokens = max_tokens
-        self.client = Anthropic(api_key=api_key)
+        default_headers = {}
+        if workspace_id.strip():
+            default_headers["anthropic-workspace-id"] = workspace_id.strip()
+        self.client = Anthropic(api_key=api_key, default_headers=default_headers or None)
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         response = self.client.messages.create(
@@ -47,4 +50,5 @@ class LLMProviderFactory:
             api_key=self.settings.anthropic_api_key,
             model=self.settings.llm_model,
             max_tokens=max_tokens,
+            workspace_id=self.settings.anthropic_workspace_id,
         )

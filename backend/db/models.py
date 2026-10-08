@@ -54,7 +54,11 @@ class CategoryTaxonomy(Base):
     __table_args__ = {"schema": "enrichment"}
 
     category_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    parent_category_id: Mapped[str | None] = mapped_column(
+        String(50), ForeignKey("enrichment.category_taxonomy.category_id"), nullable=True
+    )
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    level: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

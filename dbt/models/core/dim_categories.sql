@@ -1,4 +1,6 @@
 select distinct
     category_id,
-    category
+    subcategory,
+    parent_category_id,
+    parent_category
 from {{ ref('stg_chase_transactions') }}
