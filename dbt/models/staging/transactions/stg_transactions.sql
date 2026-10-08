@@ -12,7 +12,8 @@ with active_categorizations as (
 
 select
     t.id as transaction_id,
-    t.statement_import_id,
+    t.ingestion_run_id,
+    t.account_id,
     t.posted_date,
     trim(t.description) as description,
     t.amount,
@@ -30,8 +31,7 @@ select
     t.page_number,
     t.row_number,
     t.created_at
-from {{ source('raw', 'statement_transactions') }} t
+from {{ source('raw', 'transactions') }} t
 left join active_categorizations c on c.transaction_id = t.id
 left join {{ source('enrichment', 'category_taxonomy') }} ct on ct.category_id = c.category_id
 left join {{ source('enrichment', 'category_taxonomy') }} parent_ct on parent_ct.category_id = ct.parent_category_id
-where t.source = 'chase_pdf'

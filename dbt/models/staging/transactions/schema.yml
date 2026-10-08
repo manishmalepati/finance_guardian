@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: stg_chase_transactions
+  - name: stg_transactions
     columns:
       - name: transaction_id
         tests:

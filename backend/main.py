@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routes import agent, analytics, categorization, health, imports, transactions
+from backend.api.routes import agent, analytics, categorization, health, imports, plaid, transactions
 from backend.common.exceptions import AppError, app_error_handler
 from backend.db.session import init_database
 
@@ -24,6 +24,7 @@ def startup() -> None:
 
 app.include_router(health.router)
 app.include_router(imports.router, prefix="/imports", tags=["imports"])
+app.include_router(plaid.router, prefix="/plaid", tags=["plaid"])
 app.include_router(transactions.router, prefix="/transactions", tags=["transactions"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(agent.router, prefix="/agent", tags=["agent"])

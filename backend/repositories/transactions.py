@@ -5,7 +5,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.sql import Select
 from sqlalchemy.orm import Session, aliased
 
-from backend.db.models import CategoryTaxonomy, RawTransaction, StatementImport, TransactionCategorization
+from backend.db.models import CategoryTaxonomy, IngestionRun, RawTransaction, TransactionCategorization
 
 
 class TransactionRepository:
@@ -64,5 +64,5 @@ class TransactionRepository:
             select(RawTransaction).order_by(func.abs(RawTransaction.amount).desc()).limit(limit)
         ).all()
 
-    def find_import_by_hash(self, file_hash: str) -> StatementImport | None:
-        return self.session.scalar(select(StatementImport).where(StatementImport.file_hash == file_hash))
+    def find_ingestion_run_by_fingerprint(self, source_fingerprint: str) -> IngestionRun | None:
+        return self.session.scalar(select(IngestionRun).where(IngestionRun.source_fingerprint == source_fingerprint))

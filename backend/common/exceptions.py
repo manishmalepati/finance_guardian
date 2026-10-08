@@ -60,6 +60,14 @@ class UnsupportedSourceError(IngestionError):
     error_code = "unsupported_source"
 
 
+class PlaidIntegrationError(AppError):
+    """Raised when a Plaid request or sync cannot be completed."""
+
+    status_code = status.HTTP_502_BAD_GATEWAY
+    error_code = "plaid_integration_error"
+    user_message = "Plaid integration failed."
+
+
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     """Map expected application exceptions to stable API errors."""
 
