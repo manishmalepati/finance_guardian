@@ -400,14 +400,12 @@ class PlaidService:
         return self._class(module_name, class_name)(**kwargs)
 
     def _transactions_sync_options(self) -> Any:
-        try:
-            return self._model(
-                "transactions_sync_request_options",
-                "TransactionsSyncRequestOptions",
-                personal_finance_category_version="v2",
-            )
-        except Exception:
-            return {"personal_finance_category_version": "v2"}
+        pfc_version = self._class("personal_finance_category_version", "PersonalFinanceCategoryVersion")("v2")
+        return self._model(
+            "transactions_sync_request_options",
+            "TransactionsSyncRequestOptions",
+            personal_finance_category_version=pfc_version,
+        )
 
     def _class(self, module_name: str, class_name: str) -> Any:
         try:
