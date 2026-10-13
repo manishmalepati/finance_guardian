@@ -6,6 +6,7 @@ sources:
     tables:
       - name: ingestion_runs
       - name: plaid_items
+      - name: plaid_sync_runs
       - name: plaid_transactions
       - name: statement_documents
       - name: statement_transactions
@@ -27,8 +28,14 @@ sources:
               - accepted_values:
                   arguments:
                     values: ["credit", "debit"]
+          - name: status
+            tests:
+              - accepted_values:
+                  arguments:
+                    values: ["active", "pending", "removed", "superseded"]
   - name: enrichment
     schema: enrichment
     tables:
       - name: category_taxonomy
+      - name: plaid_category_mappings
       - name: transaction_categorizations

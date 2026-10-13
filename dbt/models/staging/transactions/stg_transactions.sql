@@ -18,7 +18,11 @@ select
     trim(t.description) as description,
     t.amount,
     t.direction,
+    t.status,
     t.account_name,
+    t.plaid_pfc_primary,
+    t.plaid_pfc_detailed,
+    t.plaid_pfc_confidence,
     coalesce(c.category_id, 'other_uncategorized') as category_id,
     coalesce(ct.display_name, 'Uncategorized') as subcategory,
     coalesce(parent_ct.category_id, 'other') as parent_category_id,
@@ -35,3 +39,4 @@ from {{ source('core', 'transactions') }} t
 left join active_categorizations c on c.transaction_id = t.id
 left join {{ source('enrichment', 'category_taxonomy') }} ct on ct.category_id = c.category_id
 left join {{ source('enrichment', 'category_taxonomy') }} parent_ct on parent_ct.category_id = ct.parent_category_id
+where t.status in ('active', 'pending')

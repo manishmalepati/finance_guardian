@@ -42,6 +42,10 @@ class Transaction(Base):
     source_transaction_key: Mapped[str] = mapped_column(String(255), nullable=False)
     plaid_transaction_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     pending_plaid_transaction_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    replaced_by_transaction_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("core.transactions.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
     posted_date: Mapped[date] = mapped_column(Date, nullable=False)
     authorized_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -50,12 +54,20 @@ class Transaction(Base):
     direction: Mapped[str] = mapped_column(String(10), nullable=False)
     account_name: Mapped[str] = mapped_column(String(255), nullable=False, default="Chase")
     category_hint: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    plaid_pfc_primary: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    plaid_pfc_detailed: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    plaid_pfc_confidence: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    plaid_pfc_icon_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     payment_channel: Mapped[str | None] = mapped_column(String(50), nullable=True)
     iso_currency_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     is_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     page_number: Mapped[int | None] = mapped_column(nullable=True)
     row_number: Mapped[int | None] = mapped_column(nullable=True)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     ingestion_run: Mapped[IngestionRun] = relationship(back_populates="transactions")
     account: Mapped["FinancialAccount | None"] = relationship(back_populates="transactions")
@@ -98,15 +110,40 @@ class PlaidRawTransaction(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     direction: Mapped[str] = mapped_column(String(10), nullable=False)
     personal_finance_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    plaid_pfc_primary: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    plaid_pfc_detailed: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    plaid_pfc_confidence: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    plaid_pfc_icon_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     payment_channel: Mapped[str | None] = mapped_column(String(50), nullable=True)
     iso_currency_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     is_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     raw_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class PlaidSyncRun(Base):
+    __tablename__ = "plaid_sync_runs"
+    __table_args__ = {"schema": "raw"}
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    plaid_item_id: Mapped[str] = mapped_column(String(255), ForeignKey("raw.plaid_items.item_id"), nullable=False)
+    ingestion_run_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("raw.ingestion_runs.id"), nullable=False
+    )
+    cursor_before: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cursor_after: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="running")
+    added_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    modified_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    removed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class FinancialAccount(Base):
@@ -208,6 +245,27 @@ class MerchantAlias(Base):
     )
     source: Mapped[str] = mapped_column(String(30), nullable=False)
     confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False, default=Decimal("1.000"))
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PlaidCategoryMapping(Base):
+    __tablename__ = "plaid_category_mappings"
+    __table_args__ = (
+        UniqueConstraint("plaid_pfc_detailed", name="uq_plaid_category_mapping_detailed"),
+        {"schema": "enrichment"},
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    plaid_pfc_primary: Mapped[str] = mapped_column(String(100), nullable=False)
+    plaid_pfc_detailed: Mapped[str] = mapped_column(String(150), nullable=False)
+    category_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("enrichment.category_taxonomy.category_id"), nullable=False
+    )
+    confidence_floor: Mapped[Decimal | None] = mapped_column(Numeric(4, 3), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

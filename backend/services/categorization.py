@@ -17,6 +17,7 @@ from backend.db.models import (
     CategorizationJob,
     CategoryTaxonomy,
     MerchantAlias,
+    PlaidCategoryMapping,
     Transaction,
     TransactionCategorization,
 )
@@ -170,6 +171,137 @@ SEED_ALIASES = [
 ]
 
 
+PLAID_PFC_MAPPINGS = [
+    ("INCOME", "INCOME_CHILD_SUPPORT", "income_other"),
+    ("INCOME", "INCOME_CONTRACTOR", "income_salary"),
+    ("INCOME", "INCOME_DIVIDENDS", "income_interest_dividends"),
+    ("INCOME", "INCOME_GIG_ECONOMY", "income_salary"),
+    ("INCOME", "INCOME_INTEREST_EARNED", "income_interest_dividends"),
+    ("INCOME", "INCOME_LONG_TERM_DISABILITY", "income_other"),
+    ("INCOME", "INCOME_MILITARY", "income_salary"),
+    ("INCOME", "INCOME_RENTAL", "income_other"),
+    ("INCOME", "INCOME_RETIREMENT_PENSION", "income_other"),
+    ("INCOME", "INCOME_SALARY", "income_salary"),
+    ("INCOME", "INCOME_TAX_REFUND", "income_refunds_reimbursements"),
+    ("INCOME", "INCOME_UNEMPLOYMENT", "income_other"),
+    ("INCOME", "INCOME_OTHER", "income_other"),
+    ("LOAN_DISBURSEMENTS", "LOAN_DISBURSEMENTS_AUTO", "financial_transfers"),
+    ("LOAN_DISBURSEMENTS", "LOAN_DISBURSEMENTS_CASH_ADVANCES", "financial_transfers"),
+    ("LOAN_DISBURSEMENTS", "LOAN_DISBURSEMENTS_EWA", "financial_transfers"),
+    ("LOAN_DISBURSEMENTS", "LOAN_DISBURSEMENTS_MORTGAGE", "financial_transfers"),
+    ("LOAN_DISBURSEMENTS", "LOAN_DISBURSEMENTS_PERSONAL", "financial_transfers"),
+    ("LOAN_DISBURSEMENTS", "LOAN_DISBURSEMENTS_STUDENT", "financial_transfers"),
+    ("LOAN_DISBURSEMENTS", "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT", "financial_transfers"),
+    ("LOAN_PAYMENTS", "LOAN_PAYMENTS_BNPL", "financial_transfers"),
+    ("LOAN_PAYMENTS", "LOAN_PAYMENTS_CAR_PAYMENT", "financial_transfers"),
+    ("LOAN_PAYMENTS", "LOAN_PAYMENTS_CASH_ADVANCES", "financial_transfers"),
+    ("LOAN_PAYMENTS", "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT", "financial_credit_card_payment"),
+    ("LOAN_PAYMENTS", "LOAN_PAYMENTS_EWA", "financial_transfers"),
+    ("LOAN_PAYMENTS", "LOAN_PAYMENTS_MORTGAGE_PAYMENT", "financial_transfers"),
+    ("LOAN_PAYMENTS", "LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT", "financial_transfers"),
+    ("LOAN_PAYMENTS", "LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT", "financial_transfers"),
+    ("LOAN_PAYMENTS", "LOAN_PAYMENTS_OTHER_PAYMENT", "financial_transfers"),
+    ("TRANSFER_IN", "TRANSFER_IN_ACCOUNT_TRANSFER", "financial_transfers"),
+    ("TRANSFER_IN", "TRANSFER_IN_DEPOSIT", "financial_transfers"),
+    ("TRANSFER_IN", "TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS", "financial_transfers"),
+    ("TRANSFER_IN", "TRANSFER_IN_SAVINGS", "financial_transfers"),
+    ("TRANSFER_IN", "TRANSFER_IN_TRANSFER_IN_FROM_APPS", "financial_transfers"),
+    ("TRANSFER_IN", "TRANSFER_IN_WIRE", "financial_transfers"),
+    ("TRANSFER_IN", "TRANSFER_IN_OTHER_TRANSFER_IN", "financial_transfers"),
+    ("TRANSFER_OUT", "TRANSFER_OUT_ACCOUNT_TRANSFER", "financial_transfers"),
+    ("TRANSFER_OUT", "TRANSFER_OUT_CRYPTO", "financial_transfers"),
+    ("TRANSFER_OUT", "TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS", "financial_transfers"),
+    ("TRANSFER_OUT", "TRANSFER_OUT_SAVINGS", "financial_transfers"),
+    ("TRANSFER_OUT", "TRANSFER_OUT_TRANSFER_OUT_FROM_APPS", "financial_transfers"),
+    ("TRANSFER_OUT", "TRANSFER_OUT_WIRE", "financial_transfers"),
+    ("TRANSFER_OUT", "TRANSFER_OUT_WITHDRAWAL", "financial_cash_atm"),
+    ("TRANSFER_OUT", "TRANSFER_OUT_OTHER_TRANSFER_OUT", "financial_transfers"),
+    ("BANK_FEES", "BANK_FEES_ATM_FEES", "financial_cash_atm"),
+    ("BANK_FEES", "BANK_FEES_INSUFFICIENT_FUNDS", "financial_fees_interest"),
+    ("BANK_FEES", "BANK_FEES_INTEREST_CHARGE", "financial_fees_interest"),
+    ("BANK_FEES", "BANK_FEES_FOREIGN_TRANSACTION_FEES", "financial_fees_interest"),
+    ("BANK_FEES", "BANK_FEES_OVERDRAFT_FEES", "financial_fees_interest"),
+    ("BANK_FEES", "BANK_FEES_LATE_FEES", "financial_fees_interest"),
+    ("BANK_FEES", "BANK_FEES_CASH_ADVANCE", "financial_fees_interest"),
+    ("BANK_FEES", "BANK_FEES_OTHER_BANK_FEES", "financial_fees_interest"),
+    ("ENTERTAINMENT", "ENTERTAINMENT_CASINOS_AND_GAMBLING", "entertainment_events"),
+    ("ENTERTAINMENT", "ENTERTAINMENT_MUSIC_AND_AUDIO", "entertainment_digital"),
+    ("ENTERTAINMENT", "ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS", "entertainment_events"),
+    ("ENTERTAINMENT", "ENTERTAINMENT_TV_AND_MOVIES", "entertainment_digital"),
+    ("ENTERTAINMENT", "ENTERTAINMENT_VIDEO_GAMES", "entertainment_digital"),
+    ("ENTERTAINMENT", "ENTERTAINMENT_OTHER_ENTERTAINMENT", "entertainment_events"),
+    ("FOOD_AND_DRINK", "FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR", "food_bars_alcohol"),
+    ("FOOD_AND_DRINK", "FOOD_AND_DRINK_COFFEE", "food_prepared"),
+    ("FOOD_AND_DRINK", "FOOD_AND_DRINK_FAST_FOOD", "food_prepared"),
+    ("FOOD_AND_DRINK", "FOOD_AND_DRINK_GROCERIES", "food_groceries"),
+    ("FOOD_AND_DRINK", "FOOD_AND_DRINK_RESTAURANT", "food_prepared"),
+    ("FOOD_AND_DRINK", "FOOD_AND_DRINK_VENDING_MACHINES", "food_prepared"),
+    ("FOOD_AND_DRINK", "FOOD_AND_DRINK_OTHER_FOOD_AND_DRINK", "food_prepared"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS", "education_books_supplies"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES", "shopping_clothing"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_CONVENIENCE_STORES", "shopping_general"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_DEPARTMENT_STORES", "shopping_general"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_DISCOUNT_STORES", "shopping_general"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_ELECTRONICS", "shopping_electronics"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES", "shopping_general"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_OFFICE_SUPPLIES", "education_books_supplies"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_ONLINE_MARKETPLACES", "shopping_general"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_PET_SUPPLIES", "shopping_general"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_SPORTING_GOODS", "shopping_general"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_SUPERSTORES", "shopping_general"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_TOBACCO_AND_VAPE", "shopping_general"),
+    ("GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE", "shopping_general"),
+    ("HOME_IMPROVEMENT", "HOME_IMPROVEMENT_FURNITURE", "shopping_home_goods"),
+    ("HOME_IMPROVEMENT", "HOME_IMPROVEMENT_HARDWARE", "housing_maintenance"),
+    ("HOME_IMPROVEMENT", "HOME_IMPROVEMENT_REPAIR_AND_MAINTENANCE", "housing_maintenance"),
+    ("HOME_IMPROVEMENT", "HOME_IMPROVEMENT_SECURITY", "housing_maintenance"),
+    ("HOME_IMPROVEMENT", "HOME_IMPROVEMENT_OTHER_HOME_IMPROVEMENT", "housing_maintenance"),
+    ("MEDICAL", "MEDICAL_DENTAL_CARE", "health_dental_vision"),
+    ("MEDICAL", "MEDICAL_EYE_CARE", "health_dental_vision"),
+    ("MEDICAL", "MEDICAL_NURSING_CARE", "health_medical"),
+    ("MEDICAL", "MEDICAL_PHARMACIES_AND_SUPPLEMENTS", "health_pharmacy"),
+    ("MEDICAL", "MEDICAL_PRIMARY_CARE", "health_medical"),
+    ("MEDICAL", "MEDICAL_VETERINARY_SERVICES", "health_medical"),
+    ("MEDICAL", "MEDICAL_OTHER_MEDICAL", "health_medical"),
+    ("PERSONAL_CARE", "PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS", "health_fitness"),
+    ("PERSONAL_CARE", "PERSONAL_CARE_HAIR_AND_BEAUTY", "shopping_personal_care"),
+    ("PERSONAL_CARE", "PERSONAL_CARE_LAUNDRY_AND_DRY_CLEANING", "shopping_personal_care"),
+    ("PERSONAL_CARE", "PERSONAL_CARE_OTHER_PERSONAL_CARE", "shopping_personal_care"),
+    ("GENERAL_SERVICES", "GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING", "financial_transfers"),
+    ("GENERAL_SERVICES", "GENERAL_SERVICES_AUTOMOTIVE", "transport_vehicle_maintenance"),
+    ("GENERAL_SERVICES", "GENERAL_SERVICES_CHILDCARE", "other_misc"),
+    ("GENERAL_SERVICES", "GENERAL_SERVICES_CONSULTING_AND_LEGAL", "other_misc"),
+    ("GENERAL_SERVICES", "GENERAL_SERVICES_EDUCATION", "education_courses"),
+    ("GENERAL_SERVICES", "GENERAL_SERVICES_INSURANCE", "transport_vehicle_insurance"),
+    ("GENERAL_SERVICES", "GENERAL_SERVICES_POSTAGE_AND_SHIPPING", "other_misc"),
+    ("GENERAL_SERVICES", "GENERAL_SERVICES_STORAGE", "other_misc"),
+    ("GENERAL_SERVICES", "GENERAL_SERVICES_OTHER_GENERAL_SERVICES", "other_misc"),
+    ("GOVERNMENT_AND_NON_PROFIT", "GOVERNMENT_AND_NON_PROFIT_DONATIONS", "gifts_donations_charity"),
+    ("GOVERNMENT_AND_NON_PROFIT", "GOVERNMENT_AND_NON_PROFIT_GOVERNMENT_DEPARTMENTS_AND_AGENCIES", "other_misc"),
+    ("GOVERNMENT_AND_NON_PROFIT", "GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT", "financial_taxes"),
+    ("GOVERNMENT_AND_NON_PROFIT", "GOVERNMENT_AND_NON_PROFIT_OTHER_GOVERNMENT_AND_NON_PROFIT", "other_misc"),
+    ("TRANSPORTATION", "TRANSPORTATION_BIKES_AND_SCOOTERS", "transport_vehicle_maintenance"),
+    ("TRANSPORTATION", "TRANSPORTATION_GAS", "transport_fuel"),
+    ("TRANSPORTATION", "TRANSPORTATION_PARKING", "transport_parking_tolls"),
+    ("TRANSPORTATION", "TRANSPORTATION_PUBLIC_TRANSIT", "transport_public_transit"),
+    ("TRANSPORTATION", "TRANSPORTATION_TAXIS_AND_RIDE_SHARES", "transport_rideshare_taxi"),
+    ("TRANSPORTATION", "TRANSPORTATION_TOLLS", "transport_parking_tolls"),
+    ("TRANSPORTATION", "TRANSPORTATION_OTHER_TRANSPORTATION", "transport_vehicle_maintenance"),
+    ("TRAVEL", "TRAVEL_FLIGHTS", "travel_flights"),
+    ("TRAVEL", "TRAVEL_LODGING", "travel_lodging"),
+    ("TRAVEL", "TRAVEL_RENTAL_CARS", "travel_rental_cars"),
+    ("TRAVEL", "TRAVEL_OTHER_TRAVEL", "travel_activities"),
+    ("RENT_AND_UTILITIES", "RENT_AND_UTILITIES_GAS_AND_ELECTRICITY", "housing_utilities"),
+    ("RENT_AND_UTILITIES", "RENT_AND_UTILITIES_INTERNET_AND_CABLE", "housing_internet_phone"),
+    ("RENT_AND_UTILITIES", "RENT_AND_UTILITIES_RENT", "housing_rent_mortgage"),
+    ("RENT_AND_UTILITIES", "RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT", "housing_utilities"),
+    ("RENT_AND_UTILITIES", "RENT_AND_UTILITIES_TELEPHONE", "housing_internet_phone"),
+    ("RENT_AND_UTILITIES", "RENT_AND_UTILITIES_WATER", "housing_utilities"),
+    ("RENT_AND_UTILITIES", "RENT_AND_UTILITIES_OTHER_UTILITIES", "housing_utilities"),
+    ("OTHER", "OTHER_OTHER", "other_uncategorized"),
+]
+
+
 @dataclass(frozen=True)
 class CategorizationResult:
     category_id: str
@@ -293,6 +425,26 @@ class CategorizationService:
                         confidence=Decimal("1.000"),
                     )
                 )
+
+        existing_pfc_mappings = {
+            mapping.plaid_pfc_detailed: mapping
+            for mapping in self.session.scalars(select(PlaidCategoryMapping)).all()
+        }
+        for primary, detailed, category_id in PLAID_PFC_MAPPINGS:
+            mapping = existing_pfc_mappings.get(detailed)
+            if mapping:
+                mapping.plaid_pfc_primary = primary
+                mapping.category_id = category_id
+                mapping.status = "active"
+                continue
+            self.session.add(
+                PlaidCategoryMapping(
+                    plaid_pfc_primary=primary,
+                    plaid_pfc_detailed=detailed,
+                    category_id=category_id,
+                    status="active",
+                )
+            )
         self.session.commit()
 
     def list_categories(self) -> list[dict]:
@@ -324,11 +476,19 @@ class CategorizationService:
         ]
 
     def summary(self) -> dict:
-        total_transactions = self.session.scalar(select(func.count()).select_from(Transaction)) or 0
+        total_transactions = (
+            self.session.scalar(
+                select(func.count()).select_from(Transaction).where(Transaction.status.in_(["active", "pending"]))
+            )
+            or 0
+        )
         categorized_transactions = (
             self.session.scalar(
-                select(func.count(func.distinct(TransactionCategorization.transaction_id))).where(
-                    TransactionCategorization.status == "active"
+                select(func.count(func.distinct(TransactionCategorization.transaction_id)))
+                .join(Transaction, Transaction.id == TransactionCategorization.transaction_id)
+                .where(
+                    TransactionCategorization.status == "active",
+                    Transaction.status.in_(["active", "pending"]),
                 )
             )
             or 0
@@ -375,6 +535,7 @@ class CategorizationService:
     def apply_known_aliases_and_queue_unknowns(self, commit: bool = True) -> dict:
         transactions = self._transactions_without_active_category()
         aliases = self._active_aliases()
+        plaid_mappings = self._active_plaid_mappings()
         categorized = 0
         unknowns: dict[str, list[Transaction]] = defaultdict(list)
 
@@ -389,6 +550,19 @@ class CategorizationService:
                         canonical_merchant_name=alias.canonical_merchant_name,
                         source=alias.source,
                         confidence=alias.confidence,
+                    ),
+                    normalized_merchant=normalized,
+                )
+                categorized += 1
+            elif transaction.plaid_pfc_detailed and transaction.plaid_pfc_detailed in plaid_mappings:
+                mapping = plaid_mappings[transaction.plaid_pfc_detailed]
+                self._set_transaction_category(
+                    transaction=transaction,
+                    result=CategorizationResult(
+                        category_id=mapping.category_id,
+                        canonical_merchant_name=transaction.merchant_name or self._title_from_normalized(normalized),
+                        source="plaid_pfc",
+                        confidence=self._pfc_confidence_score(transaction.plaid_pfc_confidence),
                     ),
                     normalized_merchant=normalized,
                 )
@@ -514,6 +688,7 @@ class CategorizationService:
         return self.session.scalars(
             select(Transaction)
             .where(Transaction.id.not_in(active_categorized))
+            .where(Transaction.status.in_(["active", "pending"]))
             .order_by(Transaction.created_at)
         ).all()
 
@@ -523,6 +698,12 @@ class CategorizationService:
             .where(MerchantAlias.status == "active")
             .order_by(MerchantAlias.normalized_pattern.desc())
         ).all()
+
+    def _active_plaid_mappings(self) -> dict[str, PlaidCategoryMapping]:
+        rows = self.session.scalars(
+            select(PlaidCategoryMapping).where(PlaidCategoryMapping.status == "active")
+        ).all()
+        return {row.plaid_pfc_detailed: row for row in rows}
 
     def _match_alias(self, normalized_description: str, aliases: list[MerchantAlias]) -> MerchantAlias | None:
         matches = [
@@ -633,7 +814,9 @@ class CategorizationService:
             return 0
 
         updated = 0
-        transactions = self.session.scalars(select(Transaction)).all()
+        transactions = self.session.scalars(
+            select(Transaction).where(Transaction.status.in_(["active", "pending"]))
+        ).all()
         for transaction in transactions:
             normalized = self.normalizer.normalize(transaction.description)
             if alias.normalized_pattern not in normalized:
@@ -661,6 +844,16 @@ class CategorizationService:
 
     def _title_from_normalized(self, normalized: str) -> str:
         return normalized.title() if normalized else "Unknown Merchant"
+
+    def _pfc_confidence_score(self, confidence_level: str | None) -> Decimal:
+        scores = {
+            "VERY_HIGH": Decimal("0.980"),
+            "HIGH": Decimal("0.900"),
+            "MEDIUM": Decimal("0.700"),
+            "LOW": Decimal("0.500"),
+            "UNKNOWN": Decimal("0.300"),
+        }
+        return scores.get((confidence_level or "").upper(), Decimal("0.600"))
 
     def _llm_categorize_jobs(self, jobs: list[CategorizationJob], categories: list[dict]) -> dict[str, dict[str, Any]]:
         system_prompt = (

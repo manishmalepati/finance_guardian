@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from backend.db.models import (
     FinancialAccount,
     IngestionRun,
     PlaidItem,
+    PlaidSyncRun,
     PlaidRawTransaction,
     Transaction,
     TransactionCategorization,
@@ -137,7 +138,8 @@ class PlaidService:
     def _sync_item_transactions(self, item: PlaidItem) -> dict[str, int]:
         totals = {"transactions_added": 0, "transactions_modified": 0, "transactions_removed": 0}
         has_more = True
-        cursor = item.sync_cursor
+        cursor_before = item.sync_cursor
+        cursor = cursor_before
         import_record = IngestionRun(
             source="plaid",
             filename=f"{item.institution_name or item.item_id} Plaid sync",
@@ -145,9 +147,20 @@ class PlaidService:
         )
         self.session.add(import_record)
         self.session.flush()
+        sync_run = PlaidSyncRun(
+            plaid_item_id=item.item_id,
+            ingestion_run_id=import_record.id,
+            cursor_before=cursor_before,
+        )
+        self.session.add(sync_run)
+        self.session.flush()
 
         while has_more:
-            request_args: dict[str, Any] = {"access_token": item.access_token, "count": 500}
+            request_args: dict[str, Any] = {
+                "access_token": item.access_token,
+                "count": 500,
+                "options": self._transactions_sync_options(),
+            }
             if cursor:
                 request_args["cursor"] = cursor
             request = self._model("transactions_sync_request", "TransactionsSyncRequest", **request_args)
@@ -165,6 +178,12 @@ class PlaidService:
             has_more = bool(self._value(response, "has_more", False))
 
         item.sync_cursor = cursor
+        sync_run.cursor_after = cursor
+        sync_run.added_count = totals["transactions_added"]
+        sync_run.modified_count = totals["transactions_modified"]
+        sync_run.removed_count = totals["transactions_removed"]
+        sync_run.status = "completed"
+        sync_run.completed_at = datetime.now(UTC)
         return totals
 
     def _upsert_transaction(self, item: PlaidItem, import_record: IngestionRun, transaction: Any) -> None:
@@ -187,7 +206,11 @@ class PlaidService:
             source_transaction_key=plaid_transaction_id,
             plaid_transaction_id=plaid_transaction_id,
         )
-        target.pending_plaid_transaction_id = self._value(transaction, "pending_transaction_id")
+        is_pending = bool(self._value(transaction, "pending", False))
+        pending_plaid_transaction_id = self._value(transaction, "pending_transaction_id")
+        target.pending_plaid_transaction_id = pending_plaid_transaction_id
+        target.status = "pending" if is_pending else "active"
+        target.removed_at = None
         target.account_id = account.id if account else None
         target.posted_date = self._parse_date(self._value(transaction, "date"))
         target.authorized_date = self._parse_optional_date(self._value(transaction, "authorized_date"))
@@ -197,33 +220,41 @@ class PlaidService:
         target.direction = "credit" if amount < 0 else "debit"
         target.account_name = self._account_name(item, account)
         target.category_hint = self._category_hint(transaction)
+        target.plaid_pfc_primary = self._pfc_primary(transaction)
+        target.plaid_pfc_detailed = self._pfc_detailed(transaction)
+        target.plaid_pfc_confidence = self._pfc_confidence(transaction)
+        target.plaid_pfc_icon_url = self._string_or_none(self._value(transaction, "personal_finance_category_icon_url"))
         target.payment_channel = self._value(transaction, "payment_channel")
         target.iso_currency_code = self._value(transaction, "iso_currency_code")
-        target.is_pending = bool(self._value(transaction, "pending", False))
+        target.is_pending = is_pending
         target.page_number = None
         target.row_number = None
         if existing is None:
             self.session.add(target)
             self.session.flush()
+        if pending_plaid_transaction_id and not is_pending:
+            self._supersede_pending_transaction(pending_plaid_transaction_id, target)
         self._upsert_raw_plaid_transaction(item=item, transaction=transaction, canonical_transaction_id=target.id)
 
     def _remove_transactions(self, transaction_ids: list[str]) -> int:
         if not transaction_ids:
             return 0
-        local_ids = self.session.scalars(
-            select(Transaction.id).where(
-                Transaction.plaid_transaction_id.in_(transaction_ids),
-            )
+        removed_at = datetime.now(UTC)
+        transactions = self.session.scalars(
+            select(Transaction).where(Transaction.plaid_transaction_id.in_(transaction_ids))
         ).all()
-        if not local_ids:
-            return 0
+        transaction_by_plaid_id = {transaction.plaid_transaction_id: transaction for transaction in transactions}
         for raw in self.session.scalars(
             select(PlaidRawTransaction).where(PlaidRawTransaction.plaid_transaction_id.in_(transaction_ids))
         ).all():
-            raw.canonical_transaction_id = None
-        self.session.execute(delete(TransactionCategorization).where(TransactionCategorization.transaction_id.in_(local_ids)))
-        result = self.session.execute(delete(Transaction).where(Transaction.id.in_(local_ids)))
-        return int(result.rowcount or 0)
+            raw.removed_at = removed_at
+            transaction = transaction_by_plaid_id.get(raw.plaid_transaction_id)
+            if transaction:
+                raw.canonical_transaction_id = transaction.id
+        for transaction in transactions:
+            transaction.status = "removed"
+            transaction.removed_at = removed_at
+        return len(transactions)
 
     def _sync_accounts(self, item: PlaidItem) -> int:
         request = self._model("accounts_get_request", "AccountsGetRequest", access_token=item.access_token)
@@ -285,10 +316,56 @@ class PlaidService:
         raw.amount = abs(amount)
         raw.direction = "credit" if amount < 0 else "debit"
         raw.personal_finance_category = self._category_hint(transaction)
+        raw.plaid_pfc_primary = self._pfc_primary(transaction)
+        raw.plaid_pfc_detailed = self._pfc_detailed(transaction)
+        raw.plaid_pfc_confidence = self._pfc_confidence(transaction)
+        raw.plaid_pfc_icon_url = self._string_or_none(self._value(transaction, "personal_finance_category_icon_url"))
         raw.payment_channel = self._value(transaction, "payment_channel")
         raw.iso_currency_code = self._value(transaction, "iso_currency_code")
         raw.is_pending = bool(self._value(transaction, "pending", False))
         raw.raw_payload = self._as_dict(transaction)
+        raw.removed_at = None
+
+    def _supersede_pending_transaction(self, pending_plaid_transaction_id: str, posted_transaction: Transaction) -> None:
+        pending_transaction = self.session.scalar(
+            select(Transaction).where(Transaction.plaid_transaction_id == pending_plaid_transaction_id)
+        )
+        if pending_transaction is None or pending_transaction.id == posted_transaction.id:
+            return
+        pending_transaction.status = "superseded"
+        pending_transaction.is_pending = False
+        pending_transaction.replaced_by_transaction_id = posted_transaction.id
+        pending_transaction.removed_at = datetime.now(UTC)
+        self._copy_active_category_if_needed(from_transaction=pending_transaction, to_transaction=posted_transaction)
+
+    def _copy_active_category_if_needed(self, from_transaction: Transaction, to_transaction: Transaction) -> None:
+        existing_target_category = self.session.scalar(
+            select(TransactionCategorization).where(
+                TransactionCategorization.transaction_id == to_transaction.id,
+                TransactionCategorization.status == "active",
+            )
+        )
+        if existing_target_category is not None:
+            return
+        source_category = self.session.scalar(
+            select(TransactionCategorization).where(
+                TransactionCategorization.transaction_id == from_transaction.id,
+                TransactionCategorization.status == "active",
+            )
+        )
+        if source_category is None:
+            return
+        self.session.add(
+            TransactionCategorization(
+                transaction_id=to_transaction.id,
+                normalized_merchant=source_category.normalized_merchant,
+                canonical_merchant_name=source_category.canonical_merchant_name,
+                category_id=source_category.category_id,
+                source=source_category.source,
+                confidence=source_category.confidence,
+                status="active",
+            )
+        )
 
     def _items_for_sync(self, item_id: str | None) -> list[PlaidItem]:
         statement = select(PlaidItem).where(PlaidItem.status == "active").order_by(PlaidItem.created_at.asc())
@@ -322,6 +399,16 @@ class PlaidService:
     def _model(self, module_name: str, class_name: str, **kwargs: Any) -> Any:
         return self._class(module_name, class_name)(**kwargs)
 
+    def _transactions_sync_options(self) -> Any:
+        try:
+            return self._model(
+                "transactions_sync_request_options",
+                "TransactionsSyncRequestOptions",
+                personal_finance_category_version="v2",
+            )
+        except Exception:
+            return {"personal_finance_category_version": "v2"}
+
     def _class(self, module_name: str, class_name: str) -> Any:
         try:
             module = __import__(f"plaid.model.{module_name}", fromlist=[class_name])
@@ -351,12 +438,30 @@ class PlaidService:
         return merchant or self._value(transaction, "name") or "Plaid transaction"
 
     def _category_hint(self, transaction: Any) -> str | None:
-        personal_finance_category = self._value(transaction, "personal_finance_category")
-        detailed = self._value(personal_finance_category, "detailed")
-        primary = self._value(personal_finance_category, "primary")
+        detailed = self._pfc_detailed(transaction)
+        primary = self._pfc_primary(transaction)
         if detailed and primary:
             return f"{primary}:{detailed}"
         return detailed or primary
+
+    def _pfc_primary(self, transaction: Any) -> str | None:
+        personal_finance_category = self._value(transaction, "personal_finance_category")
+        return self._string_or_none(self._value(personal_finance_category, "primary"))
+
+    def _pfc_detailed(self, transaction: Any) -> str | None:
+        personal_finance_category = self._value(transaction, "personal_finance_category")
+        return self._string_or_none(self._value(personal_finance_category, "detailed"))
+
+    def _pfc_confidence(self, transaction: Any) -> str | None:
+        personal_finance_category = self._value(transaction, "personal_finance_category")
+        return self._string_or_none(self._value(personal_finance_category, "confidence_level"))
+
+    def _string_or_none(self, value: Any) -> str | None:
+        if value is None:
+            return None
+        if hasattr(value, "value"):
+            return str(value.value)
+        return str(value)
 
     def _account_name(self, item: PlaidItem, account: FinancialAccount | None) -> str:
         if account and item.institution_name:

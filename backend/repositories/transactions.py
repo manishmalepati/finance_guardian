@@ -23,7 +23,7 @@ class TransactionRepository:
     ) -> Sequence[Transaction]:
         statement: Select[tuple[Transaction]] = select(Transaction).order_by(
             Transaction.posted_date.desc(), Transaction.created_at.desc()
-        )
+        ).where(Transaction.status.in_(["active", "pending"]))
         if start_date:
             statement = statement.where(Transaction.posted_date >= start_date)
         if end_date:
@@ -49,6 +49,7 @@ class TransactionRepository:
             .outerjoin(TransactionCategorization, active_category)
             .outerjoin(CategoryTaxonomy, CategoryTaxonomy.category_id == TransactionCategorization.category_id)
             .outerjoin(parent_category, parent_category.category_id == CategoryTaxonomy.parent_category_id)
+            .where(Transaction.status.in_(["active", "pending"]))
             .order_by(Transaction.posted_date.desc(), Transaction.created_at.desc())
         )
         if start_date:
@@ -61,7 +62,10 @@ class TransactionRepository:
 
     def get_largest(self, limit: int = 10) -> Sequence[Transaction]:
         return self.session.scalars(
-            select(Transaction).order_by(func.abs(Transaction.amount).desc()).limit(limit)
+            select(Transaction)
+            .where(Transaction.status.in_(["active", "pending"]))
+            .order_by(func.abs(Transaction.amount).desc())
+            .limit(limit)
         ).all()
 
     def find_ingestion_run_by_fingerprint(self, source_fingerprint: str) -> IngestionRun | None:

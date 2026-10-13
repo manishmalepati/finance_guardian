@@ -28,6 +28,7 @@ class AnalyticsService:
                 func.count().label("transaction_count"),
             )
             .group_by("year", "month")
+            .where(Transaction.status.in_(["active", "pending"]))
             .order_by("year", "month")
         ).all()
         return [self._row_to_dict(row) for row in rows]
@@ -53,7 +54,7 @@ class AnalyticsService:
             CategoryTaxonomy, CategoryTaxonomy.category_id == TransactionCategorization.category_id
         ).outerjoin(
             parent_category, parent_category.category_id == CategoryTaxonomy.parent_category_id
-        ).where(Transaction.direction == "debit")
+        ).where(Transaction.direction == "debit", Transaction.status.in_(["active", "pending"]))
         if start_date:
             statement = statement.where(Transaction.posted_date >= start_date)
         if end_date:
@@ -79,6 +80,7 @@ class AnalyticsService:
             .outerjoin(TransactionCategorization, active_category)
             .outerjoin(CategoryTaxonomy, CategoryTaxonomy.category_id == TransactionCategorization.category_id)
             .outerjoin(parent_category, parent_category.category_id == CategoryTaxonomy.parent_category_id)
+            .where(Transaction.status.in_(["active", "pending"]))
             .order_by(Transaction.amount.desc())
             .limit(limit)
         ).all()

@@ -43,6 +43,7 @@ The v2 data model is Plaid-first and split into source-native and canonical laye
 
 - `raw.ingestion_runs`: one local ingest/sync event from Plaid or statement upload.
 - `raw.plaid_items`: Plaid Item state, including the server-only access token and sync cursor.
+- `raw.plaid_sync_runs`: one cursor-based Plaid transaction sync attempt per Item.
 - `raw.plaid_transactions`: provider-native Plaid transaction payloads and sync evidence.
 - `raw.statement_documents`: uploaded PDF statement files keyed by file hash.
 - `raw.statement_transactions`: parsed statement rows with deterministic row hashes.
@@ -50,7 +51,7 @@ The v2 data model is Plaid-first and split into source-native and canonical laye
 - `core.transactions`: canonical transactions consumed by categorization, dbt, analytics, and the agent.
 
 See `docs/data-architecture-v2.md` for the identity model, PDF reconciliation
-strategy, and planned LLM tool surface.
+strategy, Plaid sync lifecycle, PFC mapping strategy, and planned LLM tool surface.
 
 For a clean local rebuild after schema changes:
 

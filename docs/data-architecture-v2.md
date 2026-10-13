@@ -23,10 +23,52 @@ manual records, and future providers.
 - `core.financial_accounts.source_account_key`: Plaid account ID for Plaid accounts.
 - `core.transactions.plaid_transaction_id`: unique Plaid transaction ID when present.
 - `raw.plaid_transactions.plaid_transaction_id`: provider-native transaction record.
+- `raw.plaid_sync_runs`: one attempted Plaid transaction sync for an Item.
 
 `core.transactions` is the table that analytics, categorization, the API, and
 LLM tools should read from. Raw Plaid rows point to the canonical transaction
 through `canonical_transaction_id`.
+
+## Plaid Sync Semantics
+
+Plaid sync is cursor-based and must be applied atomically. The app requests
+`/transactions/sync` with the saved Item cursor, applies all `added`, `modified`,
+and `removed` changes across every page, and only advances the stored cursor
+after the full sync succeeds. If any page or database write fails, the local
+transaction rolls back and the previous cursor is retained.
+
+Plaid removals are soft deletes locally:
+
+- `raw.plaid_transactions.removed_at` records when Plaid removed the transaction.
+- `core.transactions.status = 'removed'` removes it from default analytics.
+- Active categorization rows are preserved for audit/history instead of deleted.
+
+Pending-to-posted transitions use Plaid's `pending_transaction_id`. When a posted
+transaction references a prior pending transaction, the pending canonical row is
+marked `superseded`, linked through `replaced_by_transaction_id`, and any active
+category assignment is copied to the posted transaction unless the posted
+transaction already has its own active category.
+
+Default analytics and user-facing transaction lists read only transactions with
+`status in ('active', 'pending')`.
+
+## Plaid Personal Finance Categories
+
+Plaid Personal Finance Categories are preserved as source suggestions, not used
+as the app's canonical taxonomy. Plaid publishes the full PFC taxonomy as a CSV
+from its docs, and the app maps PFC detailed categories into
+`enrichment.category_taxonomy` through `enrichment.plaid_category_mappings`.
+
+The current categorization precedence is:
+
+```text
+user override / alias > seed alias > Plaid PFC mapping > LLM queue > uncategorized
+```
+
+The Plaid sync request opts into PFCv2 with
+`options.personal_finance_category_version = 'v2'`. Raw Plaid PFC values are
+stored on both `raw.plaid_transactions` and `core.transactions` so mappings can
+be revised and reapplied later.
 
 ## Statement Uploads
 
