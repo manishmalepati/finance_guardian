@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session
 
 from backend.common.exceptions import ConfigurationError, PlaidIntegrationError
 from backend.core.config import settings
-from backend.db.models import FinancialAccount, IngestionRun, PlaidItem, RawTransaction, TransactionCategorization
+from backend.db.models import (
+    FinancialAccount,
+    IngestionRun,
+    PlaidItem,
+    PlaidRawTransaction,
+    Transaction,
+    TransactionCategorization,
+)
 from backend.services.categorization import CategorizationService
 
 
@@ -163,9 +170,8 @@ class PlaidService:
     def _upsert_transaction(self, item: PlaidItem, import_record: IngestionRun, transaction: Any) -> None:
         plaid_transaction_id = self._value(transaction, "transaction_id")
         existing = self.session.scalar(
-            select(RawTransaction).where(
-                RawTransaction.source == "plaid",
-                RawTransaction.source_transaction_key == plaid_transaction_id,
+            select(Transaction).where(
+                Transaction.plaid_transaction_id == plaid_transaction_id,
             )
         )
         account = self.session.scalar(
@@ -175,36 +181,48 @@ class PlaidService:
             )
         )
         amount = Decimal(str(self._value(transaction, "amount", 0))).quantize(Decimal("0.01"))
-        target = existing or RawTransaction(
+        target = existing or Transaction(
             ingestion_run_id=import_record.id,
             source="plaid",
             source_transaction_key=plaid_transaction_id,
+            plaid_transaction_id=plaid_transaction_id,
         )
+        target.pending_plaid_transaction_id = self._value(transaction, "pending_transaction_id")
         target.account_id = account.id if account else None
         target.posted_date = self._parse_date(self._value(transaction, "date"))
+        target.authorized_date = self._parse_optional_date(self._value(transaction, "authorized_date"))
         target.description = self._description(transaction)
+        target.merchant_name = self._value(transaction, "merchant_name")
         target.amount = abs(amount)
         target.direction = "credit" if amount < 0 else "debit"
         target.account_name = self._account_name(item, account)
         target.category_hint = self._category_hint(transaction)
+        target.payment_channel = self._value(transaction, "payment_channel")
+        target.iso_currency_code = self._value(transaction, "iso_currency_code")
+        target.is_pending = bool(self._value(transaction, "pending", False))
         target.page_number = None
         target.row_number = None
         if existing is None:
             self.session.add(target)
+            self.session.flush()
+        self._upsert_raw_plaid_transaction(item=item, transaction=transaction, canonical_transaction_id=target.id)
 
     def _remove_transactions(self, transaction_ids: list[str]) -> int:
         if not transaction_ids:
             return 0
         local_ids = self.session.scalars(
-            select(RawTransaction.id).where(
-                RawTransaction.source == "plaid",
-                RawTransaction.source_transaction_key.in_(transaction_ids),
+            select(Transaction.id).where(
+                Transaction.plaid_transaction_id.in_(transaction_ids),
             )
         ).all()
         if not local_ids:
             return 0
+        for raw in self.session.scalars(
+            select(PlaidRawTransaction).where(PlaidRawTransaction.plaid_transaction_id.in_(transaction_ids))
+        ).all():
+            raw.canonical_transaction_id = None
         self.session.execute(delete(TransactionCategorization).where(TransactionCategorization.transaction_id.in_(local_ids)))
-        result = self.session.execute(delete(RawTransaction).where(RawTransaction.id.in_(local_ids)))
+        result = self.session.execute(delete(Transaction).where(Transaction.id.in_(local_ids)))
         return int(result.rowcount or 0)
 
     def _sync_accounts(self, item: PlaidItem) -> int:
@@ -237,8 +255,40 @@ class PlaidService:
             account.available_balance = self._decimal_or_none(self._value(balances, "available"))
             account.current_balance = self._decimal_or_none(self._value(balances, "current"))
             account.iso_currency_code = self._value(balances, "iso_currency_code")
+            account.raw_payload = self._as_dict(account_payload)
             upserted += 1
         return upserted
+
+    def _upsert_raw_plaid_transaction(self, item: PlaidItem, transaction: Any, canonical_transaction_id: str) -> None:
+        plaid_transaction_id = self._value(transaction, "transaction_id")
+        amount = Decimal(str(self._value(transaction, "amount", 0))).quantize(Decimal("0.01"))
+        raw = self.session.get(PlaidRawTransaction, plaid_transaction_id)
+        if raw is None:
+            raw = PlaidRawTransaction(
+                plaid_transaction_id=plaid_transaction_id,
+                plaid_account_id=self._value(transaction, "account_id"),
+                plaid_item_id=item.item_id,
+                posted_date=self._parse_date(self._value(transaction, "date")),
+                name=self._value(transaction, "name") or self._description(transaction),
+                amount=abs(amount),
+                direction="credit" if amount < 0 else "debit",
+            )
+            self.session.add(raw)
+        raw.plaid_account_id = self._value(transaction, "account_id")
+        raw.plaid_item_id = item.item_id
+        raw.canonical_transaction_id = canonical_transaction_id
+        raw.pending_transaction_id = self._value(transaction, "pending_transaction_id")
+        raw.posted_date = self._parse_date(self._value(transaction, "date"))
+        raw.authorized_date = self._parse_optional_date(self._value(transaction, "authorized_date"))
+        raw.name = self._value(transaction, "name") or self._description(transaction)
+        raw.merchant_name = self._value(transaction, "merchant_name")
+        raw.amount = abs(amount)
+        raw.direction = "credit" if amount < 0 else "debit"
+        raw.personal_finance_category = self._category_hint(transaction)
+        raw.payment_channel = self._value(transaction, "payment_channel")
+        raw.iso_currency_code = self._value(transaction, "iso_currency_code")
+        raw.is_pending = bool(self._value(transaction, "pending", False))
+        raw.raw_payload = self._as_dict(transaction)
 
     def _items_for_sync(self, item_id: str | None) -> list[PlaidItem]:
         statement = select(PlaidItem).where(PlaidItem.status == "active").order_by(PlaidItem.created_at.asc())
@@ -291,6 +341,11 @@ class PlaidService:
             return value
         return date.fromisoformat(str(value))
 
+    def _parse_optional_date(self, value: Any) -> date | None:
+        if value in (None, ""):
+            return None
+        return self._parse_date(value)
+
     def _description(self, transaction: Any) -> str:
         merchant = self._value(transaction, "merchant_name")
         return merchant or self._value(transaction, "name") or "Plaid transaction"
@@ -314,3 +369,25 @@ class PlaidService:
         if value is None:
             return None
         return Decimal(str(value)).quantize(Decimal("0.01"))
+
+    def _as_dict(self, payload: Any) -> dict | None:
+        if payload is None:
+            return None
+        if isinstance(payload, dict):
+            return self._json_safe(payload)
+        if hasattr(payload, "to_dict"):
+            return self._json_safe(payload.to_dict())
+        return None
+
+    def _json_safe(self, value: Any) -> Any:
+        if isinstance(value, Decimal):
+            return str(value)
+        if isinstance(value, date):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {str(key): self._json_safe(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [self._json_safe(item) for item in value]
+        if hasattr(value, "value"):
+            return self._json_safe(value.value)
+        return value

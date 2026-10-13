@@ -17,7 +17,7 @@ from backend.db.models import (
     CategorizationJob,
     CategoryTaxonomy,
     MerchantAlias,
-    RawTransaction,
+    Transaction,
     TransactionCategorization,
 )
 from backend.llm.base import LLMProvider
@@ -206,7 +206,7 @@ class MerchantNormalizer:
 
 
 class CategorizationService:
-    """Categorize raw transactions through taxonomy, aliases, user edits, and LLM suggestions."""
+    """Categorize canonical transactions through taxonomy, aliases, user edits, and LLM suggestions."""
 
     def __init__(self, session: Session, llm_provider: LLMProvider | None = None):
         self.session = session
@@ -324,7 +324,7 @@ class CategorizationService:
         ]
 
     def summary(self) -> dict:
-        total_transactions = self.session.scalar(select(func.count()).select_from(RawTransaction)) or 0
+        total_transactions = self.session.scalar(select(func.count()).select_from(Transaction)) or 0
         categorized_transactions = (
             self.session.scalar(
                 select(func.count(func.distinct(TransactionCategorization.transaction_id))).where(
@@ -376,7 +376,7 @@ class CategorizationService:
         transactions = self._transactions_without_active_category()
         aliases = self._active_aliases()
         categorized = 0
-        unknowns: dict[str, list[RawTransaction]] = defaultdict(list)
+        unknowns: dict[str, list[Transaction]] = defaultdict(list)
 
         for transaction in transactions:
             normalized = self.normalizer.normalize(transaction.description)
@@ -469,7 +469,7 @@ class CategorizationService:
         apply_to_matching_merchant: bool = True,
     ) -> dict:
         self._require_category(category_id)
-        transaction = self.session.get(RawTransaction, transaction_id)
+        transaction = self.session.get(Transaction, transaction_id)
         if transaction is None:
             raise ValueError("Transaction was not found.")
 
@@ -507,14 +507,14 @@ class CategorizationService:
             "matching_transactions_updated": matching_transactions_updated,
         }
 
-    def _transactions_without_active_category(self) -> list[RawTransaction]:
+    def _transactions_without_active_category(self) -> list[Transaction]:
         active_categorized = select(TransactionCategorization.transaction_id).where(
             TransactionCategorization.status == "active"
         )
         return self.session.scalars(
-            select(RawTransaction)
-            .where(RawTransaction.id.not_in(active_categorized))
-            .order_by(RawTransaction.created_at)
+            select(Transaction)
+            .where(Transaction.id.not_in(active_categorized))
+            .order_by(Transaction.created_at)
         ).all()
 
     def _active_aliases(self) -> list[MerchantAlias]:
@@ -537,7 +537,7 @@ class CategorizationService:
 
     def _set_transaction_category(
         self,
-        transaction: RawTransaction,
+        transaction: Transaction,
         result: CategorizationResult,
         normalized_merchant: str,
         supersede_existing: bool = False,
@@ -566,7 +566,7 @@ class CategorizationService:
         for row in active_rows:
             row.status = "superseded"
 
-    def _upsert_jobs(self, unknowns: dict[str, list[RawTransaction]]) -> int:
+    def _upsert_jobs(self, unknowns: dict[str, list[Transaction]]) -> int:
         queued = 0
         for normalized_merchant, transactions in unknowns.items():
             if not normalized_merchant:
@@ -633,7 +633,7 @@ class CategorizationService:
             return 0
 
         updated = 0
-        transactions = self.session.scalars(select(RawTransaction)).all()
+        transactions = self.session.scalars(select(Transaction)).all()
         for transaction in transactions:
             normalized = self.normalizer.normalize(transaction.description)
             if alias.normalized_pattern not in normalized:

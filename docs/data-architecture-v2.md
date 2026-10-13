@@ -1,0 +1,90 @@
+# Data Architecture v2
+
+Finance Guardian is now Plaid-first. Plaid is the primary transaction source,
+and uploaded statements are supplemental evidence used for history backfills,
+statement reconciliation, and audit trails.
+
+## Layering
+
+The database is split into source-native facts and canonical product facts:
+
+- `raw`: provider payloads and document extraction results.
+- `core`: canonical accounts and transactions used by the app.
+- `enrichment`: categories, merchant aliases, and user/LLM categorization.
+- `analytics`: dbt-derived marts for summaries, comparisons, and agent tools.
+
+## Plaid-First Identity
+
+Plaid IDs are first-class external keys, but local UUIDs remain primary keys.
+This keeps the model flexible for PDF-only history, relinked Plaid Items,
+manual records, and future providers.
+
+- `raw.plaid_items.item_id`: Plaid Item identity and sync cursor.
+- `core.financial_accounts.source_account_key`: Plaid account ID for Plaid accounts.
+- `core.transactions.plaid_transaction_id`: unique Plaid transaction ID when present.
+- `raw.plaid_transactions.plaid_transaction_id`: provider-native transaction record.
+
+`core.transactions` is the table that analytics, categorization, the API, and
+LLM tools should read from. Raw Plaid rows point to the canonical transaction
+through `canonical_transaction_id`.
+
+## Statement Uploads
+
+PDF uploads are deliberately secondary. A statement import creates:
+
+- `raw.statement_documents`: one row per uploaded file, keyed by file hash.
+- `raw.statement_transactions`: one row per parsed statement row.
+- `core.transactions`: fallback canonical transactions created from statement
+  rows until a reconciliation process matches them to Plaid transactions.
+
+Statement row identity is deterministic:
+
+```text
+sha256(file_hash + row_number + posted_date + normalized_description + amount + direction)
+```
+
+That means the same PDF import can be detected as a duplicate, and individual
+statement rows have stable identities even before they are matched to Plaid.
+
+## Reconciliation Direction
+
+The next reconciliation layer should compare statement rows against canonical
+Plaid transactions using account, date window, amount, direction, and normalized
+description. Outcomes should be explicit:
+
+- `matched`: statement row confirms an existing Plaid transaction.
+- `statement_only`: transaction exists in a statement but not in Plaid.
+- `plaid_only`: transaction exists in Plaid but not in the statement period.
+- `ambiguous`: multiple plausible matches need review.
+
+When a statement row is matched to a Plaid transaction, it should point to the
+existing `core.transactions.id` instead of creating a duplicate canonical row.
+
+## LLM Tool Implications
+
+The LLM should never receive database access. It should use bounded tools over
+`core` and `analytics` data:
+
+- `get_spending_summary(start_date, end_date, group_by)`
+- `search_transactions(query, filters)`
+- `get_merchant_history(merchant_name, date_range)`
+- `get_recurring_transactions()`
+- `get_income_summary(start_date, end_date)`
+- `compare_periods(period_a, period_b, dimensions)`
+- `find_anomalies(start_date, end_date)`
+- `get_budget_status(month)`
+- `get_statement_reconciliation(statement_id)`
+
+This implies durable feedback tables in later phases for budgets, merchant
+aliases, transaction annotations, recurring-series confirmations, exclusions,
+and user category overrides.
+
+## Local Migration
+
+This branch intentionally changes schema shape. For local development, drop and
+recreate the database volume after merging schema changes:
+
+```bash
+docker compose down -v
+docker compose up --build
+```

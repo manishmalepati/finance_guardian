@@ -5,8 +5,14 @@ sources:
     schema: raw
     tables:
       - name: ingestion_runs
-      - name: financial_accounts
       - name: plaid_items
+      - name: plaid_transactions
+      - name: statement_documents
+      - name: statement_transactions
+  - name: core
+    schema: core
+    tables:
+      - name: financial_accounts
       - name: transactions
         columns:
           - name: id

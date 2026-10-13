@@ -16,6 +16,7 @@ def init_database() -> None:
 
     with engine.begin() as connection:
         connection.execute(text("create schema if not exists raw"))
+        connection.execute(text("create schema if not exists core"))
         connection.execute(text("create schema if not exists enrichment"))
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as session:

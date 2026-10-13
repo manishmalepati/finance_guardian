@@ -4,7 +4,7 @@ from decimal import Decimal
 from sqlalchemy import and_, case, extract, func, select
 from sqlalchemy.orm import Session, aliased
 
-from backend.db.models import CategoryTaxonomy, RawTransaction, TransactionCategorization
+from backend.db.models import CategoryTaxonomy, Transaction, TransactionCategorization
 
 
 class AnalyticsService:
@@ -15,15 +15,15 @@ class AnalyticsService:
 
     def monthly_summary(self) -> list[dict]:
         signed_amount = case(
-            (RawTransaction.direction == "debit", RawTransaction.amount),
-            else_=-RawTransaction.amount,
+            (Transaction.direction == "debit", Transaction.amount),
+            else_=-Transaction.amount,
         )
         rows = self.session.execute(
             select(
-                extract("year", RawTransaction.posted_date).label("year"),
-                extract("month", RawTransaction.posted_date).label("month"),
-                func.sum(case((RawTransaction.direction == "debit", RawTransaction.amount), else_=0)).label("debits"),
-                func.sum(case((RawTransaction.direction == "credit", RawTransaction.amount), else_=0)).label("credits"),
+                extract("year", Transaction.posted_date).label("year"),
+                extract("month", Transaction.posted_date).label("month"),
+                func.sum(case((Transaction.direction == "debit", Transaction.amount), else_=0)).label("debits"),
+                func.sum(case((Transaction.direction == "credit", Transaction.amount), else_=0)).label("credits"),
                 func.sum(signed_amount).label("net_spend"),
                 func.count().label("transaction_count"),
             )
@@ -34,7 +34,7 @@ class AnalyticsService:
 
     def category_spending(self, start_date: date | None = None, end_date: date | None = None) -> list[dict]:
         active_category = and_(
-            TransactionCategorization.transaction_id == RawTransaction.id,
+            TransactionCategorization.transaction_id == Transaction.id,
             TransactionCategorization.status == "active",
         )
         parent_category = aliased(CategoryTaxonomy)
@@ -47,39 +47,39 @@ class AnalyticsService:
             parent_category_name.label("parent_category"),
             subcategory_id.label("subcategory_id"),
             subcategory_name.label("subcategory"),
-            func.sum(RawTransaction.amount).label("amount"),
+            func.sum(Transaction.amount).label("amount"),
             func.count().label("transaction_count"),
         ).outerjoin(TransactionCategorization, active_category).outerjoin(
             CategoryTaxonomy, CategoryTaxonomy.category_id == TransactionCategorization.category_id
         ).outerjoin(
             parent_category, parent_category.category_id == CategoryTaxonomy.parent_category_id
-        ).where(RawTransaction.direction == "debit")
+        ).where(Transaction.direction == "debit")
         if start_date:
-            statement = statement.where(RawTransaction.posted_date >= start_date)
+            statement = statement.where(Transaction.posted_date >= start_date)
         if end_date:
-            statement = statement.where(RawTransaction.posted_date <= end_date)
+            statement = statement.where(Transaction.posted_date <= end_date)
         rows = self.session.execute(
             statement.group_by(
                 parent_category_id,
                 parent_category_name,
                 subcategory_id,
                 subcategory_name,
-            ).order_by(func.sum(RawTransaction.amount).desc())
+            ).order_by(func.sum(Transaction.amount).desc())
         ).all()
         return [self._row_to_dict(row) for row in rows]
 
     def largest_transactions(self, limit: int = 10) -> list[dict]:
         active_category = and_(
-            TransactionCategorization.transaction_id == RawTransaction.id,
+            TransactionCategorization.transaction_id == Transaction.id,
             TransactionCategorization.status == "active",
         )
         parent_category = aliased(CategoryTaxonomy)
         rows = self.session.execute(
-            select(RawTransaction, TransactionCategorization, CategoryTaxonomy, parent_category)
+            select(Transaction, TransactionCategorization, CategoryTaxonomy, parent_category)
             .outerjoin(TransactionCategorization, active_category)
             .outerjoin(CategoryTaxonomy, CategoryTaxonomy.category_id == TransactionCategorization.category_id)
             .outerjoin(parent_category, parent_category.category_id == CategoryTaxonomy.parent_category_id)
-            .order_by(RawTransaction.amount.desc())
+            .order_by(Transaction.amount.desc())
             .limit(limit)
         ).all()
         return [
