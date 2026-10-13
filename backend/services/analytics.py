@@ -18,6 +18,8 @@ class AnalyticsService:
             (Transaction.direction == "debit", Transaction.amount),
             else_=-Transaction.amount,
         )
+        posted_filter = Transaction.is_pending.is_(False)
+        pending_filter = Transaction.is_pending.is_(True)
         rows = self.session.execute(
             select(
                 extract("year", Transaction.posted_date).label("year"),
@@ -25,7 +27,23 @@ class AnalyticsService:
                 func.sum(case((Transaction.direction == "debit", Transaction.amount), else_=0)).label("debits"),
                 func.sum(case((Transaction.direction == "credit", Transaction.amount), else_=0)).label("credits"),
                 func.sum(signed_amount).label("net_spend"),
+                func.sum(
+                    case((and_(Transaction.direction == "debit", posted_filter), Transaction.amount), else_=0)
+                ).label("posted_debits"),
+                func.sum(
+                    case((and_(Transaction.direction == "credit", posted_filter), Transaction.amount), else_=0)
+                ).label("posted_credits"),
+                func.sum(case((posted_filter, signed_amount), else_=0)).label("posted_net_spend"),
+                func.sum(
+                    case((and_(Transaction.direction == "debit", pending_filter), Transaction.amount), else_=0)
+                ).label("pending_debits"),
+                func.sum(
+                    case((and_(Transaction.direction == "credit", pending_filter), Transaction.amount), else_=0)
+                ).label("pending_credits"),
+                func.sum(case((pending_filter, signed_amount), else_=0)).label("pending_net_spend"),
                 func.count().label("transaction_count"),
+                func.sum(case((posted_filter, 1), else_=0)).label("posted_transaction_count"),
+                func.sum(case((pending_filter, 1), else_=0)).label("pending_transaction_count"),
             )
             .group_by("year", "month")
             .where(Transaction.status.in_(["active", "pending"]))
@@ -49,7 +67,11 @@ class AnalyticsService:
             subcategory_id.label("subcategory_id"),
             subcategory_name.label("subcategory"),
             func.sum(Transaction.amount).label("amount"),
+            func.sum(case((Transaction.is_pending.is_(False), Transaction.amount), else_=0)).label("posted_amount"),
+            func.sum(case((Transaction.is_pending.is_(True), Transaction.amount), else_=0)).label("pending_amount"),
             func.count().label("transaction_count"),
+            func.sum(case((Transaction.is_pending.is_(False), 1), else_=0)).label("posted_transaction_count"),
+            func.sum(case((Transaction.is_pending.is_(True), 1), else_=0)).label("pending_transaction_count"),
         ).outerjoin(TransactionCategorization, active_category).outerjoin(
             CategoryTaxonomy, CategoryTaxonomy.category_id == TransactionCategorization.category_id
         ).outerjoin(
@@ -91,6 +113,8 @@ class AnalyticsService:
                 "description": transaction.description,
                 "amount": transaction.amount,
                 "direction": transaction.direction,
+                "is_pending": transaction.is_pending,
+                "status": transaction.status,
                 "merchant": categorization.canonical_merchant_name if categorization else None,
                 "category": parent.display_name if parent else "Uncategorized",
                 "subcategory": category.display_name if category else None,

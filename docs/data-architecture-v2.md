@@ -37,6 +37,22 @@ and `removed` changes across every page, and only advances the stored cursor
 after the full sync succeeds. If any page or database write fails, the local
 transaction rolls back and the previous cursor is retained.
 
+If Plaid returns `TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION`, the app rolls
+back the partially applied pages and restarts the entire pagination loop from
+the original cursor for that sync attempt. The sync request uses Plaid's maximum
+page size of 500 to reduce pagination conflicts.
+
+Sync-run audit records are durable even when the sync work rolls back:
+
+- A `raw.ingestion_runs` row and `raw.plaid_sync_runs` row are committed before
+  transaction pages are applied.
+- Sync data changes, categorization, and cursor advancement happen in a separate
+  transaction.
+- On failure, the data transaction is rolled back and the run envelope is marked
+  `failed` in a separate commit.
+- On success, the run envelope is marked `completed` in the same transaction as
+  the applied sync data and cursor advancement.
+
 Plaid removals are soft deletes locally:
 
 - `raw.plaid_transactions.removed_at` records when Plaid removed the transaction.
@@ -49,8 +65,16 @@ marked `superseded`, linked through `replaced_by_transaction_id`, and any active
 category assignment is copied to the posted transaction unless the posted
 transaction already has its own active category.
 
-Default analytics and user-facing transaction lists read only transactions with
+Default user-facing transaction lists read only transactions with
 `status in ('active', 'pending')`.
+
+Analytics distinguish settled reports from fresh estimates:
+
+- Existing headline totals include active posted and pending transactions.
+- `posted_*` fields include only settled transactions.
+- `pending_*` fields include pending transactions.
+- Financial reports should use posted fields by default; dashboard previews may
+  use headline totals to include pending activity.
 
 ## Plaid Personal Finance Categories
 

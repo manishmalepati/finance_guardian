@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -25,6 +26,8 @@ from backend.services.categorization import CategorizationService
 
 class PlaidService:
     """Owns Plaid API calls and maps Plaid data into local ingestion tables."""
+
+    _max_pagination_restarts = 3
 
     def __init__(self, session: Session):
         self.session = session
@@ -93,21 +96,19 @@ class PlaidService:
             return {"items_synced": 0, "transactions_added": 0, "transactions_modified": 0, "transactions_removed": 0}
 
         totals = {"items_synced": 0, "transactions_added": 0, "transactions_modified": 0, "transactions_removed": 0}
-        try:
-            for item in items:
+        for item in items:
+            try:
                 item_totals = self._sync_item_transactions(item)
                 for key, value in item_totals.items():
                     totals[key] += value
                 totals["items_synced"] += 1
-            CategorizationService(self.session).apply_known_aliases_and_queue_unknowns(commit=False)
-            self.session.commit()
-            return totals
-        except SQLAlchemyError as exc:
-            self.session.rollback()
-            raise PlaidIntegrationError("Plaid transactions could not be saved locally.") from exc
-        except Exception as exc:
-            self.session.rollback()
-            raise PlaidIntegrationError("Plaid transaction sync failed.") from exc
+            except SQLAlchemyError as exc:
+                self.session.rollback()
+                raise PlaidIntegrationError("Plaid transactions could not be saved locally.") from exc
+            except Exception as exc:
+                self.session.rollback()
+                raise PlaidIntegrationError("Plaid transaction sync failed.") from exc
+        return totals
 
     def list_items(self) -> list[dict]:
         rows = self.session.scalars(select(PlaidItem).order_by(PlaidItem.created_at.desc())).all()
@@ -136,14 +137,53 @@ class PlaidService:
         ]
 
     def _sync_item_transactions(self, item: PlaidItem) -> dict[str, int]:
-        totals = {"transactions_added": 0, "transactions_modified": 0, "transactions_removed": 0}
-        has_more = True
         cursor_before = item.sync_cursor
-        cursor = cursor_before
+        item_id = item.item_id
+        import_record_id, sync_run_id = self._start_sync_run(item=item, cursor_before=cursor_before)
+
+        try:
+            for attempt in range(1, self._max_pagination_restarts + 1):
+                try:
+                    totals = self._apply_sync_pages(
+                        item_id=item_id,
+                        ingestion_run_id=import_record_id,
+                        cursor_before=cursor_before,
+                    )
+                    break
+                except Exception as exc:
+                    self.session.rollback()
+                    if not self._is_sync_mutation_during_pagination(exc) or attempt >= self._max_pagination_restarts:
+                        raise
+            CategorizationService(self.session).apply_known_aliases_and_queue_unknowns(commit=False)
+            import_record = self.session.get(IngestionRun, import_record_id)
+            sync_run = self.session.get(PlaidSyncRun, sync_run_id)
+            item = self.session.scalar(select(PlaidItem).where(PlaidItem.item_id == item_id))
+            if import_record:
+                import_record.status = "completed"
+            if sync_run:
+                sync_run.cursor_after = item.sync_cursor if item else None
+                sync_run.added_count = totals["transactions_added"]
+                sync_run.modified_count = totals["transactions_modified"]
+                sync_run.removed_count = totals["transactions_removed"]
+                sync_run.status = "completed"
+                sync_run.completed_at = datetime.now(UTC)
+            self.session.commit()
+            return totals
+        except Exception as exc:
+            self.session.rollback()
+            self._mark_sync_run_failed(
+                ingestion_run_id=import_record_id,
+                sync_run_id=sync_run_id,
+                error_message=str(exc),
+            )
+            raise
+
+    def _start_sync_run(self, item: PlaidItem, cursor_before: str | None) -> tuple[str, str]:
         import_record = IngestionRun(
             source="plaid",
             filename=f"{item.institution_name or item.item_id} Plaid sync",
-            source_fingerprint=f"plaid:{item.item_id}:{cursor or 'initial'}:{uuid4()}",
+            source_fingerprint=f"plaid:{item.item_id}:{cursor_before or 'initial'}:{uuid4()}",
+            status="running",
         )
         self.session.add(import_record)
         self.session.flush()
@@ -151,11 +191,24 @@ class PlaidService:
             plaid_item_id=item.item_id,
             ingestion_run_id=import_record.id,
             cursor_before=cursor_before,
+            status="running",
         )
         self.session.add(sync_run)
         self.session.flush()
+        import_record_id = import_record.id
+        sync_run_id = sync_run.id
+        self.session.commit()
+        return import_record_id, sync_run_id
 
+    def _apply_sync_pages(self, item_id: str, ingestion_run_id: str, cursor_before: str | None) -> dict[str, int]:
+        totals = {"transactions_added": 0, "transactions_modified": 0, "transactions_removed": 0}
+        cursor = cursor_before
+        has_more = True
         while has_more:
+            item = self.session.scalar(select(PlaidItem).where(PlaidItem.item_id == item_id))
+            import_record = self.session.get(IngestionRun, ingestion_run_id)
+            if item is None or import_record is None:
+                raise PlaidIntegrationError("Plaid sync state was not found locally.")
             request_args: dict[str, Any] = {
                 "access_token": item.access_token,
                 "count": 500,
@@ -177,14 +230,22 @@ class PlaidService:
             cursor = self._value(response, "next_cursor")
             has_more = bool(self._value(response, "has_more", False))
 
+        item = self.session.scalar(select(PlaidItem).where(PlaidItem.item_id == item_id))
+        if item is None:
+            raise PlaidIntegrationError("Plaid Item was not found after sync.")
         item.sync_cursor = cursor
-        sync_run.cursor_after = cursor
-        sync_run.added_count = totals["transactions_added"]
-        sync_run.modified_count = totals["transactions_modified"]
-        sync_run.removed_count = totals["transactions_removed"]
-        sync_run.status = "completed"
-        sync_run.completed_at = datetime.now(UTC)
         return totals
+
+    def _mark_sync_run_failed(self, ingestion_run_id: str, sync_run_id: str, error_message: str) -> None:
+        import_record = self.session.get(IngestionRun, ingestion_run_id)
+        sync_run = self.session.get(PlaidSyncRun, sync_run_id)
+        if import_record:
+            import_record.status = "failed"
+        if sync_run:
+            sync_run.status = "failed"
+            sync_run.error_message = error_message[:2000]
+            sync_run.completed_at = datetime.now(UTC)
+        self.session.commit()
 
     def _upsert_transaction(self, item: PlaidItem, import_record: IngestionRun, transaction: Any) -> None:
         plaid_transaction_id = self._value(transaction, "transaction_id")
@@ -406,6 +467,18 @@ class PlaidService:
             "TransactionsSyncRequestOptions",
             personal_finance_category_version=pfc_version,
         )
+
+    def _is_sync_mutation_during_pagination(self, exc: Exception) -> bool:
+        if getattr(exc, "error_code", None) == "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION":
+            return True
+        body = getattr(exc, "body", None)
+        if not body:
+            return False
+        try:
+            payload = json.loads(body) if isinstance(body, str) else body
+        except (TypeError, ValueError):
+            return "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION" in str(body)
+        return payload.get("error_code") == "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
 
     def _class(self, module_name: str, class_name: str) -> Any:
         try:

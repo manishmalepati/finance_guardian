@@ -19,6 +19,7 @@ select
     t.amount,
     t.direction,
     t.status,
+    t.is_pending,
     t.account_name,
     t.plaid_pfc_primary,
     t.plaid_pfc_detailed,
