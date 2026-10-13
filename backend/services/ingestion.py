@@ -4,14 +4,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.common.exceptions import IngestionError
-from backend.db.models import IngestionRun, RawTransaction
+from backend.db.models import IngestionRun, StatementDocument, StatementRawTransaction, Transaction
 from backend.ingestion.adapters.factory import AdapterFactory
 from backend.repositories.transactions import TransactionRepository
 from backend.services.categorization import CategorizationService
 
 
 class IngestionService:
-    """Coordinates source parsing, idempotency checks, and raw persistence."""
+    """Coordinates statement parsing, idempotency checks, and canonical fallback persistence."""
 
     def __init__(self, session: Session):
         self.session = session
@@ -37,14 +37,37 @@ class IngestionService:
             ingestion_run = IngestionRun(source=source, filename=filename, source_fingerprint=file_hash)
             self.session.add(ingestion_run)
             self.session.flush()
+            statement_document = StatementDocument(
+                ingestion_run_id=ingestion_run.id,
+                source=source,
+                filename=filename,
+                file_hash=file_hash,
+            )
+            self.session.add(statement_document)
+            self.session.flush()
 
             for index, parsed in enumerate(parsed_transactions, start=1):
-                source_key = f"{file_hash}|{index}|{parsed.posted_date.isoformat()}|{parsed.description}|{parsed.amount}"
+                source_key = self._statement_row_hash(file_hash=file_hash, row_number=index, parsed=parsed)
+                canonical_transaction = Transaction(
+                    ingestion_run_id=ingestion_run.id,
+                    source="statement",
+                    source_transaction_key=source_key,
+                    posted_date=parsed.posted_date,
+                    description=parsed.description,
+                    amount=parsed.amount,
+                    direction=parsed.direction,
+                    account_name=parsed.account_name,
+                    category_hint=parsed.category_hint,
+                    page_number=parsed.page_number,
+                    row_number=parsed.row_number,
+                )
+                self.session.add(canonical_transaction)
+                self.session.flush()
                 self.session.add(
-                    RawTransaction(
-                        ingestion_run_id=ingestion_run.id,
-                        source=source,
-                        source_transaction_key=source_key,
+                    StatementRawTransaction(
+                        statement_document_id=statement_document.id,
+                        canonical_transaction_id=canonical_transaction.id,
+                        statement_row_hash=source_key,
                         posted_date=parsed.posted_date,
                         description=parsed.description,
                         amount=parsed.amount,
@@ -75,3 +98,14 @@ class IngestionService:
             "transactions_categorized": categorization_result["transactions_categorized"],
             "unknown_merchants_queued": categorization_result["unknown_merchants_queued"],
         }
+
+    def _statement_row_hash(self, file_hash: str, row_number: int, parsed) -> str:
+        stable_parts = [
+            file_hash,
+            str(row_number),
+            parsed.posted_date.isoformat(),
+            parsed.description.strip().lower(),
+            str(parsed.amount),
+            parsed.direction,
+        ]
+        return hashlib.sha256("|".join(stable_parts).encode("utf-8")).hexdigest()

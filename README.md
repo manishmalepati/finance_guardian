@@ -39,12 +39,19 @@ Open:
 Postgres data persists in the `postgres_data` Docker volume. `docker compose down`
 keeps data; `docker compose down -v` removes it.
 
-The current raw model is intentionally source-agnostic:
+The v2 data model is Plaid-first and split into source-native and canonical layers:
 
 - `raw.ingestion_runs`: one local ingest/sync event from Plaid or statement upload.
 - `raw.plaid_items`: Plaid Item state, including the server-only access token and sync cursor.
-- `raw.financial_accounts`: source account metadata normalized across providers.
-- `raw.transactions`: canonical raw transactions consumed by categorization, dbt, analytics, and the agent.
+- `raw.plaid_sync_runs`: one cursor-based Plaid transaction sync attempt per Item.
+- `raw.plaid_transactions`: provider-native Plaid transaction payloads and sync evidence.
+- `raw.statement_documents`: uploaded PDF statement files keyed by file hash.
+- `raw.statement_transactions`: parsed statement rows with deterministic row hashes.
+- `core.financial_accounts`: canonical account metadata, Plaid-backed where available.
+- `core.transactions`: canonical transactions consumed by categorization, dbt, analytics, and the agent.
+
+See `docs/data-architecture-v2.md` for the identity model, PDF reconciliation
+strategy, Plaid sync lifecycle, PFC mapping strategy, and planned LLM tool surface.
 
 For a clean local rebuild after schema changes:
 
@@ -80,11 +87,11 @@ docker compose exec backend python /app/evals/run.py
 
 ## Categorization Pipeline
 
-Transactions are imported into `raw.transactions` unchanged. The
-backend enriches them through a fixed category taxonomy, merchant aliases, user
-corrections, and optional LLM categorization for unknown merchants. dbt consumes
-the completed enrichment rows and rebuilds analytics tables from deterministic
-joins.
+Transactions are normalized into `core.transactions` from Plaid-first raw data
+and secondary statement uploads. The backend enriches canonical transactions
+through a fixed category taxonomy, merchant aliases, user corrections, and
+optional LLM categorization for unknown merchants. dbt consumes the completed
+enrichment rows and rebuilds analytics tables from deterministic joins.
 
 Useful local endpoints:
 

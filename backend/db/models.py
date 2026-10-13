@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.base import Base
@@ -20,32 +20,54 @@ class IngestionRun(Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="completed")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    transactions: Mapped[list["RawTransaction"]] = relationship(back_populates="ingestion_run")
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="ingestion_run")
 
 
-class RawTransaction(Base):
+class Transaction(Base):
+    """Canonical transaction record used by the app."""
+
     __tablename__ = "transactions"
     __table_args__ = (
         UniqueConstraint("source", "source_transaction_key", name="uq_transaction_source_key"),
-        {"schema": "raw"},
+        UniqueConstraint("plaid_transaction_id", name="uq_transaction_plaid_transaction_id"),
+        {"schema": "core"},
     )
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     ingestion_run_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("raw.ingestion_runs.id"), nullable=False
     )
-    account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("raw.financial_accounts.id"), nullable=True)
+    account_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("core.financial_accounts.id"), nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     source_transaction_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    plaid_transaction_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pending_plaid_transaction_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    replaced_by_transaction_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("core.transactions.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
     posted_date: Mapped[date] = mapped_column(Date, nullable=False)
+    authorized_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    merchant_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     direction: Mapped[str] = mapped_column(String(10), nullable=False)
     account_name: Mapped[str] = mapped_column(String(255), nullable=False, default="Chase")
     category_hint: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    plaid_pfc_primary: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    plaid_pfc_detailed: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    plaid_pfc_confidence: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    plaid_pfc_icon_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payment_channel: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    iso_currency_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    is_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     page_number: Mapped[int | None] = mapped_column(nullable=True)
     row_number: Mapped[int | None] = mapped_column(nullable=True)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     ingestion_run: Mapped[IngestionRun] = relationship(back_populates="transactions")
     account: Mapped["FinancialAccount | None"] = relationship(back_populates="transactions")
@@ -70,11 +92,65 @@ class PlaidItem(Base):
     accounts: Mapped[list["FinancialAccount"]] = relationship(back_populates="plaid_item")
 
 
+class PlaidRawTransaction(Base):
+    __tablename__ = "plaid_transactions"
+    __table_args__ = {"schema": "raw"}
+
+    plaid_transaction_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    plaid_account_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    plaid_item_id: Mapped[str] = mapped_column(String(255), ForeignKey("raw.plaid_items.item_id"), nullable=False)
+    canonical_transaction_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("core.transactions.id"), nullable=True
+    )
+    pending_transaction_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    posted_date: Mapped[date] = mapped_column(Date, nullable=False)
+    authorized_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    merchant_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    direction: Mapped[str] = mapped_column(String(10), nullable=False)
+    personal_finance_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    plaid_pfc_primary: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    plaid_pfc_detailed: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    plaid_pfc_confidence: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    plaid_pfc_icon_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payment_channel: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    iso_currency_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    is_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    raw_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PlaidSyncRun(Base):
+    __tablename__ = "plaid_sync_runs"
+    __table_args__ = {"schema": "raw"}
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    plaid_item_id: Mapped[str] = mapped_column(String(255), ForeignKey("raw.plaid_items.item_id"), nullable=False)
+    ingestion_run_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("raw.ingestion_runs.id"), nullable=False
+    )
+    cursor_before: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cursor_after: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="running")
+    added_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    modified_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    removed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class FinancialAccount(Base):
     __tablename__ = "financial_accounts"
     __table_args__ = (
         UniqueConstraint("source", "source_account_key", name="uq_financial_account_source_key"),
-        {"schema": "raw"},
+        {"schema": "core"},
     )
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
@@ -89,13 +165,54 @@ class FinancialAccount(Base):
     available_balance: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     current_balance: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     iso_currency_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    raw_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     plaid_item: Mapped[PlaidItem | None] = relationship(back_populates="accounts")
-    transactions: Mapped[list[RawTransaction]] = relationship(back_populates="account")
+    transactions: Mapped[list[Transaction]] = relationship(back_populates="account")
+
+
+class StatementDocument(Base):
+    __tablename__ = "statement_documents"
+    __table_args__ = {"schema": "raw"}
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    ingestion_run_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("raw.ingestion_runs.id"), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_hash: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class StatementRawTransaction(Base):
+    __tablename__ = "statement_transactions"
+    __table_args__ = (
+        UniqueConstraint("statement_document_id", "statement_row_hash", name="uq_statement_transaction_row"),
+        {"schema": "raw"},
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    statement_document_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("raw.statement_documents.id"), nullable=False
+    )
+    canonical_transaction_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("core.transactions.id"), nullable=True
+    )
+    statement_row_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    posted_date: Mapped[date] = mapped_column(Date, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    direction: Mapped[str] = mapped_column(String(10), nullable=False)
+    account_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    category_hint: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    page_number: Mapped[int | None] = mapped_column(nullable=True)
+    row_number: Mapped[int | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class CategoryTaxonomy(Base):
@@ -135,6 +252,27 @@ class MerchantAlias(Base):
     )
 
 
+class PlaidCategoryMapping(Base):
+    __tablename__ = "plaid_category_mappings"
+    __table_args__ = (
+        UniqueConstraint("plaid_pfc_detailed", name="uq_plaid_category_mapping_detailed"),
+        {"schema": "enrichment"},
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    plaid_pfc_primary: Mapped[str] = mapped_column(String(100), nullable=False)
+    plaid_pfc_detailed: Mapped[str] = mapped_column(String(150), nullable=False)
+    category_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("enrichment.category_taxonomy.category_id"), nullable=False
+    )
+    confidence_floor: Mapped[Decimal | None] = mapped_column(Numeric(4, 3), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class CategorizationJob(Base):
     __tablename__ = "categorization_jobs"
     __table_args__ = (
@@ -160,7 +298,7 @@ class TransactionCategorization(Base):
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     transaction_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("raw.transactions.id"), nullable=False
+        UUID(as_uuid=False), ForeignKey("core.transactions.id"), nullable=False
     )
     normalized_merchant: Mapped[str] = mapped_column(String(255), nullable=False)
     canonical_merchant_name: Mapped[str] = mapped_column(String(255), nullable=False)

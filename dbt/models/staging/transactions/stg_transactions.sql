@@ -18,20 +18,26 @@ select
     trim(t.description) as description,
     t.amount,
     t.direction,
+    t.status,
+    t.is_pending,
     t.account_name,
+    t.plaid_pfc_primary,
+    t.plaid_pfc_detailed,
+    t.plaid_pfc_confidence,
     coalesce(c.category_id, 'other_uncategorized') as category_id,
     coalesce(ct.display_name, 'Uncategorized') as subcategory,
     coalesce(parent_ct.category_id, 'other') as parent_category_id,
     coalesce(parent_ct.display_name, 'Other') as parent_category,
     c.normalized_merchant,
-    coalesce(c.canonical_merchant_name, trim(t.description)) as merchant_name,
+    coalesce(c.canonical_merchant_name, t.merchant_name, trim(t.description)) as merchant_name,
     c.categorization_source,
     c.categorization_confidence,
     t.source,
     t.page_number,
     t.row_number,
     t.created_at
-from {{ source('raw', 'transactions') }} t
+from {{ source('core', 'transactions') }} t
 left join active_categorizations c on c.transaction_id = t.id
 left join {{ source('enrichment', 'category_taxonomy') }} ct on ct.category_id = c.category_id
 left join {{ source('enrichment', 'category_taxonomy') }} parent_ct on parent_ct.category_id = ct.parent_category_id
+where t.status in ('active', 'pending')

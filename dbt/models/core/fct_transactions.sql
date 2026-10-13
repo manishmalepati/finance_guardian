@@ -10,6 +10,8 @@ select
     amount,
     case when direction = 'debit' then amount else -amount end as signed_amount,
     direction,
+    status,
+    is_pending,
     categorization_source,
     categorization_confidence,
     source,
