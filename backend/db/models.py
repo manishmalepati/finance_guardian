@@ -230,6 +230,21 @@ class CategoryTaxonomy(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class MonthlyCategoryLimit(Base):
+    """Recurring monthly spending limit for a parent category."""
+
+    __tablename__ = "monthly_category_limits"
+    __table_args__ = {"schema": "planning"}
+
+    category_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("enrichment.category_taxonomy.category_id"), primary_key=True
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class MerchantAlias(Base):
     __tablename__ = "merchant_aliases"
     __table_args__ = (

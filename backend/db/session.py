@@ -18,6 +18,7 @@ def init_database() -> None:
         connection.execute(text("create schema if not exists raw"))
         connection.execute(text("create schema if not exists core"))
         connection.execute(text("create schema if not exists enrichment"))
+        connection.execute(text("create schema if not exists planning"))
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as session:
         CategorizationService(session).seed_defaults()

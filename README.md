@@ -49,9 +49,31 @@ The v2 data model is Plaid-first and split into source-native and canonical laye
 - `raw.statement_transactions`: parsed statement rows with deterministic row hashes.
 - `core.financial_accounts`: canonical account metadata, Plaid-backed where available.
 - `core.transactions`: canonical transactions consumed by categorization, dbt, analytics, and the agent.
+- `planning.monthly_category_limits`: recurring monthly limits for parent spending categories.
 
 See `docs/data-architecture-v2.md` for the identity model, PDF reconciliation
 strategy, Plaid sync lifecycle, PFC mapping strategy, and planned LLM tool surface.
+
+## Dashboard
+
+The dark dashboard is organized into Overview, Transactions, Reports, Accounts,
+and Settings. Overview shows posted money in and out as the main figures, with
+pending transactions shown separately and included in projected totals. Reports
+uses posted transactions for its monthly trend. "Money in" currently includes
+all credits, including refunds and transfers that have not been classified.
+
+Top spending categories compare posted and pending spending with recurring
+monthly limits. Set or remove a parent-category limit in Settings. Limits apply
+to the current month chart; historical months show spending without a limit
+marker because past limit versions are not stored.
+
+Budget endpoints:
+
+```text
+GET    /budgets/monthly-limits
+PUT    /budgets/monthly-limits/{parent_category_id}  {"amount": "500.00"}
+DELETE /budgets/monthly-limits/{parent_category_id}
+```
 
 For a clean local rebuild after schema changes:
 

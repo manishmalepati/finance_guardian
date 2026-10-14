@@ -30,6 +30,7 @@ def list_transactions(
                 "amount": transaction.amount,
                 "direction": transaction.direction,
                 "status": transaction.status,
+                "is_pending": transaction.is_pending,
                 "account_name": transaction.account_name,
                 "category_hint": transaction.category_hint,
                 "plaid_pfc_primary": transaction.plaid_pfc_primary,

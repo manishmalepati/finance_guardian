@@ -12,6 +12,17 @@ The database is split into source-native facts and canonical product facts:
 - `core`: canonical accounts and transactions used by the app.
 - `enrichment`: categories, merchant aliases, and user/LLM categorization.
 - `analytics`: dbt-derived marts for summaries, comparisons, and agent tools.
+- `planning`: recurring parent-category spending limits used by the dashboard.
+
+## Monthly Spending Limits
+
+`planning.monthly_category_limits` stores one positive USD limit per active
+parent spending category. A limit repeats each calendar month until changed or
+removed. The dashboard combines `posted_amount` and `pending_amount` from
+category spending analytics to show projected spending against that limit.
+Only the current month shows limit markers because the table does not retain
+historical versions. Custom periods, rollover, and past budget snapshots belong
+to the later Plan workflow.
 
 ## Plaid-First Identity
 
