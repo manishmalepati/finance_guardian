@@ -52,7 +52,7 @@ type PlaidAccount = {
   iso_currency_code: string | null;
 };
 type PlaidItem = {
-  item_id: string; institution_name: string | null; status: string;
+  item_id: string; institution_name: string | null; status: string; has_cursor: boolean;
   accounts: PlaidAccount[];
 };
 type PlaidHandler = { open: () => void };
@@ -385,22 +385,29 @@ export default function App() {
     await refresh();
   });
 
-  const connectBank = () => void runAction(async () => {
+  const connectBank = (existingItemId?: string) => void runAction(async () => {
     await loadPlaidScript();
-    const token = await readJson<{ link_token: string }>(await fetch(`${API_BASE_URL}/plaid/link-token`, { method: "POST" }));
+    const token = await readJson<{ link_token: string }>(await fetch(`${API_BASE_URL}/plaid/link-token`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item_id: existingItemId ?? null }),
+    }));
     if (!window.Plaid) throw new Error("Plaid Link could not be started.");
     window.Plaid.create({
       token: token.link_token,
       onSuccess: (publicToken, metadata) => {
         void runAction(async () => {
-          await readJson(await fetch(`${API_BASE_URL}/plaid/exchange-public-token`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ public_token: publicToken, metadata }),
-          }));
+          let itemId = existingItemId;
+          if (!itemId) {
+            const connected = await readJson<{ item_id: string }>(await fetch(`${API_BASE_URL}/plaid/exchange-public-token`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ public_token: publicToken, metadata }),
+            }));
+            itemId = connected.item_id;
+          }
           await readJson(await fetch(`${API_BASE_URL}/plaid/sync-transactions`, {
-            method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: itemId }),
           }));
-          setNotice("Bank connected and transactions synced.");
+          setNotice(existingItemId ? "Bank reauthenticated and transactions synced." : "Bank connected and transactions synced.");
           await refresh();
         });
       },
@@ -507,8 +514,8 @@ export default function App() {
 
       {page === "accounts" && <>
         <div className="pageHeading"><div><div className="eyebrow">DATA SOURCES</div><h1>Accounts & connections</h1><p>Manage connected institutions and keep transaction data fresh.</p></div></div>
-        <div className="accountActions"><button className="primaryButton" onClick={connectBank} disabled={busy}><Building2 size={17} />Connect bank</button><button className="secondaryButton" onClick={syncBanks} disabled={busy || plaidItems.length === 0}><RefreshCw size={17} />Sync transactions</button></div>
-        <section className="surface"><div className="sectionTitle"><div><span className="eyebrow">CONNECTED</span><h2>Institutions</h2></div><span className="sectionHint">{plaidItems.length} connected</span></div>{plaidItems.length === 0 ? <EmptyState title="No bank connections" detail="Connect a bank to bring your accounts and transactions together." /> : <div className="institutionList">{plaidItems.map((item) => <div className="institution" key={item.item_id}><div className="institutionHead"><div className="institutionIcon"><Building2 size={21} /></div><div><strong>{item.institution_name ?? "Connected institution"}</strong><span>{item.accounts.length} accounts</span></div><span className="connectionStatus"><Check size={14} />{item.status}</span></div>{item.accounts.map((account) => <div className="accountRow" key={account.account_id}><span>{account.name}{account.mask ? ` ····${account.mask}` : ""}</span><strong>{account.current_balance === null ? "Balance unavailable" : money(Number(account.current_balance))}</strong></div>)}</div>)}</div>}</section>
+        <div className="accountActions"><button className="primaryButton" onClick={() => connectBank()} disabled={busy}><Building2 size={17} />Connect bank</button><button className="secondaryButton" onClick={syncBanks} disabled={busy || plaidItems.length === 0}><RefreshCw size={17} />Sync transactions</button></div>
+        <section className="surface"><div className="sectionTitle"><div><span className="eyebrow">CONNECTED</span><h2>Institutions</h2></div><span className="sectionHint">{plaidItems.length} connected</span></div>{plaidItems.length === 0 ? <EmptyState title="No bank connections" detail="Connect a bank to bring your accounts and transactions together." /> : <div className="institutionList">{plaidItems.map((item) => <div className="institution" key={item.item_id}><div className="institutionHead"><div className="institutionIcon"><Building2 size={21} /></div><div><strong>{item.institution_name ?? "Connected institution"}</strong><span>{item.accounts.length} accounts{!item.has_cursor ? " · sync needed" : ""}</span></div><span className="connectionStatus"><Check size={14} />{item.status}</span><button className="textButton" onClick={() => connectBank(item.item_id)} disabled={busy}>Reauthenticate</button></div>{item.accounts.map((account) => <div className="accountRow" key={account.account_id}><span>{account.name}{account.mask ? ` ····${account.mask}` : ""}</span><strong>{account.current_balance === null ? "Balance unavailable" : money(Number(account.current_balance))}</strong></div>)}</div>)}</div>}</section>
         <section className="surface importPanel"><div><div className="eyebrow">SUPPLEMENTAL HISTORY</div><h2>Import a statement</h2><p>Upload a Chase PDF statement to add transactions that are not yet available through your bank connection.</p></div><label className="secondaryButton uploadButton"><FileUp size={17} />Choose PDF<input type="file" accept="application/pdf" onChange={uploadStatement} disabled={busy} /></label></section>
       </>}
 

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     plaid_products: str = "transactions"
     plaid_country_codes: str = "US"
     plaid_client_name: str = "Finance Guardian"
+    plaid_vault_key: str = ""
+    plaid_vault_path: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

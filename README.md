@@ -109,10 +109,38 @@ PLAID_ENV=sandbox
 PLAID_PRODUCTS=transactions
 PLAID_COUNTRY_CODES=US
 PLAID_CLIENT_NAME=Finance Guardian
+PLAID_VAULT_KEY=your_fernet_key
 ```
 
-Sandbox test credentials can be used through Plaid Link. For production hardening,
-encrypt Plaid access tokens before storing them outside a local development database.
+Generate `PLAID_VAULT_KEY` once and keep it in your ignored `.env` file:
+
+```bash
+docker compose exec backend python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Restart the backend after adding the key. It migrates existing Plaid access
+tokens to encrypted database values and writes an encrypted vault at
+`.local/plaid-vault-<environment>.enc`. The `.local` directory is bind-mounted
+and survives `docker compose down -v`; preserve both the vault file and its key.
+The vault is tied to the Plaid environment and client ID. Keep Sandbox and
+Production credentials, keys, vaults, and data separate. Never commit the key
+or vault, copy tokens into frontend code, or make unencrypted backups.
+Docker exposes the frontend, API, and Postgres only on localhost. This is a
+single-user local development setup; it has no application login.
+
+After a database reset, startup restores the existing Plaid Items and attempts
+to sync available history from a fresh cursor. If sync needs bank consent,
+choose **Reauthenticate** on the existing institution and then sync again.
+Do not start a new Link connection for the same bank. Plaid may not return older
+history that is no longer available through the Item; preserve the database
+when you need full history. Prefer migrations over resetting the database for
+future schema changes.
+
+Plaid [Sandbox](https://plaid.com/docs/sandbox/) permits unlimited test Items.
+The [Trial plan](https://plaid.com/docs/account/billing/) permits 10 Production
+Items total; removing an Item does not restore a slot. Repeated API calls on an
+existing Item do not create another Item. Confirm your Plaid plan before using
+real bank data.
 
 ## Useful Commands
 

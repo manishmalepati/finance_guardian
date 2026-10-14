@@ -22,6 +22,7 @@ from backend.db.models import (
     TransactionCategorization,
 )
 from backend.services.categorization import CategorizationService
+from backend.services.plaid_vault import PlaidVault
 
 
 class PlaidService:
@@ -32,25 +33,35 @@ class PlaidService:
     def __init__(self, session: Session):
         self.session = session
 
-    def create_link_token(self) -> dict:
+    def create_link_token(self, item_id: str | None = None) -> dict:
         settings.require_plaid_configuration()
-        request = self._model(
-            "link_token_create_request",
-            "LinkTokenCreateRequest",
-            products=self._products(),
+        vault = PlaidVault()
+        vault.preflight()
+        request_args = dict(
             client_name=settings.plaid_client_name,
             country_codes=self._country_codes(),
             language="en",
             user=self._model("link_token_create_request_user", "LinkTokenCreateRequestUser", client_user_id="local-user"),
         )
+        if item_id:
+            item = self.session.scalar(select(PlaidItem).where(PlaidItem.item_id == item_id))
+            if item is None:
+                raise PlaidIntegrationError("Plaid connection was not found. Restore the existing Item before reconnecting.")
+            request_args["access_token"] = vault.open(item.access_token)
+        else:
+            request_args["products"] = self._products()
+        request = self._model("link_token_create_request", "LinkTokenCreateRequest", **request_args)
         response = self._client().link_token_create(request)
         return {"link_token": self._value(response, "link_token"), "expiration": self._value(response, "expiration")}
 
     def exchange_public_token(self, public_token: str, metadata: dict[str, Any] | None = None) -> dict:
         settings.require_plaid_configuration()
+        vault = PlaidVault()
+        vault.preflight()
         if not public_token.strip():
             raise PlaidIntegrationError("Plaid public token is required.")
 
+        saved_to_vault = False
         try:
             request = self._model(
                 "item_public_token_exchange_request",
@@ -62,11 +73,17 @@ class PlaidService:
             access_token = self._value(response, "access_token")
             institution = (metadata or {}).get("institution") or {}
 
+            # The Plaid exchange cannot be rolled back. Save the token outside
+            # PostgreSQL before any account lookup or database write can fail.
+            vault.save_item(item_id, access_token, institution.get("institution_id"), institution.get("name"))
+            saved_to_vault = True
+
             item = self.session.scalar(select(PlaidItem).where(PlaidItem.item_id == item_id))
+            sealed_token = vault.seal(access_token)
             if item is None:
-                item = PlaidItem(item_id=item_id, access_token=access_token)
+                item = PlaidItem(item_id=item_id, access_token=sealed_token)
                 self.session.add(item)
-            item.access_token = access_token
+            item.access_token = sealed_token
             item.institution_id = institution.get("institution_id")
             item.institution_name = institution.get("name")
             item.status = "active"
@@ -81,16 +98,32 @@ class PlaidService:
             }
         except PlaidIntegrationError:
             self.session.rollback()
+            if saved_to_vault:
+                raise PlaidIntegrationError(
+                    "Plaid connection is secured in the vault, but local setup failed. Restart the app and sync; do not connect the bank again."
+                )
+            raise
+        except ConfigurationError:
+            self.session.rollback()
+            if saved_to_vault:
+                raise PlaidIntegrationError(
+                    "Plaid connection is secured in the vault, but local setup failed. Restart the app and sync; do not connect the bank again."
+                )
             raise
         except SQLAlchemyError as exc:
             self.session.rollback()
-            raise PlaidIntegrationError("Plaid Item could not be saved locally.") from exc
+            message = ("Plaid connection is secured in the vault, but the database update failed. "
+                       "Restart the app and sync; do not connect the bank again.") if saved_to_vault else "Plaid Item could not be saved locally."
+            raise PlaidIntegrationError(message) from exc
         except Exception as exc:
             self.session.rollback()
-            raise PlaidIntegrationError("Plaid public token exchange failed.") from exc
+            message = ("Plaid connection is secured in the vault, but local setup failed. "
+                       "Restart the app and sync; do not connect the bank again.") if saved_to_vault else "Plaid public token exchange failed."
+            raise PlaidIntegrationError(message) from exc
 
     def sync_transactions(self, item_id: str | None = None) -> dict:
         settings.require_plaid_configuration()
+        PlaidVault().preflight()
         items = self._items_for_sync(item_id)
         if not items:
             return {"items_synced": 0, "transactions_added": 0, "transactions_modified": 0, "transactions_removed": 0}
@@ -98,6 +131,9 @@ class PlaidService:
         totals = {"items_synced": 0, "transactions_added": 0, "transactions_modified": 0, "transactions_removed": 0}
         for item in items:
             try:
+                if not item.accounts:
+                    self._sync_accounts(item)
+                    self.session.commit()
                 item_totals = self._sync_item_transactions(item)
                 for key, value in item_totals.items():
                     totals[key] += value
@@ -105,6 +141,9 @@ class PlaidService:
             except SQLAlchemyError as exc:
                 self.session.rollback()
                 raise PlaidIntegrationError("Plaid transactions could not be saved locally.") from exc
+            except ConfigurationError:
+                self.session.rollback()
+                raise
             except Exception as exc:
                 self.session.rollback()
                 raise PlaidIntegrationError("Plaid transaction sync failed.") from exc
@@ -175,9 +214,16 @@ class PlaidService:
             self._mark_sync_run_failed(
                 ingestion_run_id=import_record_id,
                 sync_run_id=sync_run_id,
-                error_message=str(exc),
+                error_message=self._safe_plaid_error(exc),
             )
             raise
+
+    @staticmethod
+    def _safe_plaid_error(exc: Exception) -> str:
+        code = getattr(exc, "error_code", None)
+        if isinstance(code, str) and code.replace("_", "").isalnum():
+            return f"Plaid sync failed: {code[:100]}"
+        return "Plaid sync failed. The request can be retried after checking the connection."
 
     def _start_sync_run(self, item: PlaidItem, cursor_before: str | None) -> tuple[str, str]:
         import_record = IngestionRun(
@@ -211,7 +257,7 @@ class PlaidService:
             if item is None or import_record is None:
                 raise PlaidIntegrationError("Plaid sync state was not found locally.")
             request_args: dict[str, Any] = {
-                "access_token": item.access_token,
+                "access_token": self._access_token(item),
                 "count": 500,
                 "options": self._transactions_sync_options(),
             }
@@ -319,7 +365,7 @@ class PlaidService:
         return len(transactions)
 
     def _sync_accounts(self, item: PlaidItem) -> int:
-        request = self._model("accounts_get_request", "AccountsGetRequest", access_token=item.access_token)
+        request = self._model("accounts_get_request", "AccountsGetRequest", access_token=self._access_token(item))
         response = self._client().accounts_get(request)
         upserted = 0
         for account_payload in self._value(response, "accounts", []) or []:
@@ -449,6 +495,10 @@ class PlaidService:
             api_key={"clientId": settings.plaid_client_id, "secret": settings.plaid_secret},
         )
         return plaid_api.PlaidApi(plaid.ApiClient(configuration))
+
+    @staticmethod
+    def _access_token(item: PlaidItem) -> str:
+        return PlaidVault().open(item.access_token)
 
     def _products(self) -> list[Any]:
         products_class = self._class("products", "Products")

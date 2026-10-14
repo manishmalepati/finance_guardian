@@ -39,6 +39,21 @@ manual records, and future providers.
 - `raw.plaid_transactions.plaid_transaction_id`: provider-native transaction record.
 - `raw.plaid_sync_runs`: one attempted Plaid transaction sync for an Item.
 
+The encrypted Plaid vault at `.local/plaid-vault-<environment>.enc` stores Item
+IDs, access tokens, and institution labels outside the disposable database.
+`PLAID_VAULT_KEY` lives separately in `.env`. On startup, existing plaintext
+database tokens are migrated to encrypted values and missing Items are restored
+from the vault with a null cursor. The app then attempts to sync the history
+Plaid still makes available for those Items. A failed sync leaves the recovered
+Item visible for a later retry or Link update mode. The vault is bound to the
+Plaid environment and client ID to prevent cross-environment restores.
+
+The token exchange writes the vault before updating PostgreSQL; a database
+failure after exchange therefore leaves a recoverable Item. Link update mode
+uses the existing access token and does not exchange a new public token. A
+missing key, unreadable vault, or mismatched environment blocks new Link flows.
+Both `.env` and `.local` must be preserved when resetting the database.
+
 `core.transactions.account_id` points to `core.financial_accounts.id`. Plaid
 accounts retain the Plaid account ID as `source_account_key`. Statement imports
 receive a separate canonical account keyed by source and normalized account
@@ -190,8 +205,12 @@ and user category overrides.
 
 ## Local Migration
 
-This branch intentionally changes schema shape. For local development, drop and
-recreate the database volume after merging schema changes:
+This branch intentionally changes schema shape. For local development, a
+database reset is possible after the Plaid vault has been configured and
+verified. The reset removes local transaction history and other database-only
+state; Plaid can restore only the history still available for each Item. For
+future schema changes, prefer database migrations. To reset a disposable
+development database:
 
 ```bash
 docker compose down -v

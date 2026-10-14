@@ -19,9 +19,13 @@ class SyncTransactionsRequest(BaseModel):
     item_id: str | None = None
 
 
+class CreateLinkTokenRequest(BaseModel):
+    item_id: str | None = None
+
+
 @router.post("/link-token")
-def create_link_token(session: Session = Depends(get_session)) -> dict:
-    return PlaidService(session).create_link_token()
+def create_link_token(payload: CreateLinkTokenRequest | None = None, session: Session = Depends(get_session)) -> dict:
+    return PlaidService(session).create_link_token(item_id=payload.item_id if payload else None)
 
 
 @router.post("/exchange-public-token")
