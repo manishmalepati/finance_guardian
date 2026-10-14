@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import date
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.sql import Select
 from sqlalchemy.orm import Session, aliased
 
@@ -38,6 +38,9 @@ class TransactionRepository:
         start_date: date | None = None,
         end_date: date | None = None,
         query: str | None = None,
+        account_id: str | None = None,
+        category_id: str | None = None,
+        merchant: str | None = None,
     ) -> Sequence[tuple[Transaction, TransactionCategorization | None, CategoryTaxonomy | None, CategoryTaxonomy | None]]:
         active_category = and_(
             TransactionCategorization.transaction_id == Transaction.id,
@@ -56,8 +59,20 @@ class TransactionRepository:
             statement = statement.where(Transaction.posted_date >= start_date)
         if end_date:
             statement = statement.where(Transaction.posted_date <= end_date)
+        if account_id:
+            statement = statement.where(Transaction.account_id == account_id)
+        if category_id:
+            statement = statement.where(
+                or_(CategoryTaxonomy.category_id == category_id,
+                    func.coalesce(parent_category.category_id, "other") == category_id)
+            )
+        if merchant:
+            statement = statement.where(func.lower(TransactionCategorization.canonical_merchant_name) == merchant.lower())
         if query:
-            statement = statement.where(func.lower(Transaction.description).contains(query.lower()))
+            statement = statement.where(or_(
+                func.lower(Transaction.description).contains(query.lower()),
+                func.lower(TransactionCategorization.canonical_merchant_name).contains(query.lower()),
+            ))
         return self.session.execute(statement.limit(limit)).all()
 
     def get_largest(self, limit: int = 10) -> Sequence[Transaction]:

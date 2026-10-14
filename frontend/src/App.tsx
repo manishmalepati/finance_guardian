@@ -5,6 +5,8 @@ import {
   Check, FileUp, LayoutDashboard, List, Menu, RefreshCw, Search, Settings2,
   Sparkles, Tags, Trash2, WalletCards, X,
 } from "lucide-react";
+import { CategoryShare, CategoryTrend } from "./ReportCharts";
+import type { ReportMonth, SpendingReport } from "./ReportCharts";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 const pages = ["overview", "transactions", "reports", "accounts", "settings"] as const;
@@ -18,29 +20,25 @@ type Transaction = {
   direction: "debit" | "credit";
   is_pending: boolean;
   account_name: string;
+  account_id: string | null;
+  parent_category_id: string | null;
   canonical_merchant_name: string | null;
   category_name: string;
   subcategory_id: string | null;
   categorization_source: string | null;
 };
-type MonthlySummary = {
-  year: number; month: number;
-  posted_debits: number; posted_credits: number;
-  pending_debits: number; pending_credits: number;
-  posted_transaction_count: number; pending_transaction_count: number;
-};
 type Category = {
   category_id: string; display_name: string;
   subcategories: { category_id: string; display_name: string }[];
-};
-type CategorySpending = {
-  parent_category_id: string; parent_category: string;
-  posted_amount: number; pending_amount: number;
 };
 type CategoryTotal = {
   id: string; name: string; posted: number; pending: number;
 };
 type MonthlyLimit = { category_id: string; amount: string };
+type CanonicalAccount = {
+  id: string; name: string; mask: string | null; source: string;
+  account_type: string | null; institution_name: string | null;
+};
 type CategorizationJob = {
   id: string; normalized_merchant: string; transaction_count: number; status: string;
 };
@@ -89,6 +87,15 @@ const monthRange = (key: string) => {
   const lastDay = new Date(year, month, 0).getDate();
   return { start: `${key}-01`, end: `${key}-${String(lastDay).padStart(2, "0")}` };
 };
+const todayKey = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+};
+const reportStartKey = () => {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+  return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-01`;
+};
 const readJson = async <T,>(response: Response): Promise<T> => {
   const body = await response.json();
   if (!response.ok) throw new Error(body.detail ?? "Request failed. Please try again.");
@@ -108,35 +115,36 @@ function SummaryCard({ label, posted, pending, tone, note }: {
   </article>;
 }
 
-function TrendChart({ rows }: { rows: MonthlySummary[] }) {
-  const recent = rows.slice(-6);
-  if (recent.length === 0) return <EmptyState title="No trend yet" detail="Connect a bank or import a statement to see monthly cash flow." />;
-  const max = Math.max(1, ...recent.flatMap((row) => [Number(row.posted_debits), Number(row.posted_credits)]));
+function TrendChart({ rows }: { rows: ReportMonth[] }) {
+  const recent = rows;
+  if (recent.every((row) => !row.posted_spending && !row.posted_money_in)) return <EmptyState title="No trend yet" detail="No posted spending or money in for this date range." />;
+  const max = Math.max(1, ...recent.flatMap((row) => [Number(row.posted_spending), Number(row.posted_money_in)]));
   const x = (index: number) => 42 + index * (510 / Math.max(1, recent.length - 1));
   const y = (value: number) => 164 - (value / max) * 128;
-  const points = (key: "posted_debits" | "posted_credits") => recent.map((row, index) => `${x(index)},${y(Number(row[key]))}`).join(" ");
+  const points = (key: "posted_spending" | "posted_money_in") => recent.map((row, index) => `${x(index)},${y(Number(row[key]))}`).join(" ");
   return <div className="trendChart">
-    <div className="chartLegend"><span className="legendOut">Money out</span><span className="legendIn">Money in</span><span className="legendNote">Posted transactions</span></div>
-    <svg viewBox="0 0 594 210" role="img" aria-label="Monthly posted money in and money out trend" preserveAspectRatio="none">
+    <div className="chartLegend"><span className="legendOut">Spending</span><span className="legendIn">Money in</span><span className="legendNote">Posted · movements excluded</span></div>
+    <svg viewBox="0 0 594 210" role="img" aria-label="Monthly posted money in and spending trend" preserveAspectRatio="none">
       {[0, 0.5, 1].map((tick) => <g key={tick}>
         <line x1="42" x2="552" y1={y(max * tick)} y2={y(max * tick)} className="chartGrid" />
         <text x="4" y={y(max * tick) + 4} className="axisLabel">{shortMoney(max * tick)}</text>
       </g>)}
-      <polyline points={points("posted_debits")} className="chartLine chartLineOut" />
-      <polyline points={points("posted_credits")} className="chartLine chartLineIn" />
-      {recent.map((row, index) => <g key={`${row.year}-${row.month}`}>
-        <circle cx={x(index)} cy={y(Number(row.posted_debits))} r="4" className="chartPointOut" />
-        <circle cx={x(index)} cy={y(Number(row.posted_credits))} r="4" className="chartPointIn" />
-        <text x={x(index)} y="198" textAnchor="middle" className="axisLabel">
-          {new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(row.year, row.month - 1, 1)))}
-        </text>
+      <polyline points={points("posted_spending")} className="chartLine chartLineOut" />
+      <polyline points={points("posted_money_in")} className="chartLine chartLineIn" />
+      {recent.map((row, index) => <g key={row.month}>
+        <circle cx={x(index)} cy={y(Number(row.posted_spending))} r="4" className="chartPointOut" />
+        <circle cx={x(index)} cy={y(Number(row.posted_money_in))} r="4" className="chartPointIn" />
+        {(recent.length <= 8 || index % Math.ceil(recent.length / 8) === 0) && <text x={x(index)} y="198" textAnchor="middle" className="axisLabel">
+          {new Intl.DateTimeFormat("en-US", { month: "short", year: "2-digit", timeZone: "UTC" }).format(new Date(`${row.month}T00:00:00Z`))}
+        </text>}
       </g>)}
     </svg>
   </div>;
 }
 
-function CategoryBars({ rows, limits, showLimits = true }: {
+function CategoryBars({ rows, limits, showLimits = true, accountScoped = false, onSelect }: {
   rows: CategoryTotal[]; limits: MonthlyLimit[]; showLimits?: boolean;
+  accountScoped?: boolean; onSelect?: (categoryId: string) => void;
 }) {
   const limitMap = new Map(limits.map((limit) => [limit.category_id, Number(limit.amount)]));
   if (rows.length === 0) return <EmptyState title="No spending for this month" detail="Category spending will appear after transactions are synced or imported." />;
@@ -152,7 +160,7 @@ function CategoryBars({ rows, limits, showLimits = true }: {
       const pendingWidth = Math.max(0, Math.min(100 - postedWidth, (row.pending / scale) * 100));
       const remaining = limit === undefined ? null : limit - projected;
       return <div className="categoryBar" key={row.id}>
-        <div className="categoryBarTop"><strong>{row.name}</strong><span>{money(projected)}</span></div>
+        <div className="categoryBarTop">{onSelect ? <button className="categoryNameButton" onClick={() => onSelect(row.id)}>{row.name} <ArrowRight size={13} /></button> : <strong>{row.name}</strong>}<span>{money(projected)}</span></div>
         <div className="categoryTrack" role="img" aria-label={`${row.name}: ${money(row.posted)} posted, ${money(row.pending)} pending${limit === undefined ? "" : `, ${money(limit)} monthly limit`}`}>
           <div className="categoryPosted" style={{ width: `${postedWidth}%` }} />
           <div className="categoryPending" style={{ width: `${pendingWidth}%` }} />
@@ -161,7 +169,7 @@ function CategoryBars({ rows, limits, showLimits = true }: {
         <div className="categoryBarFoot">
           <span>{money(row.posted)} posted{row.pending > 0 ? ` · ${money(row.pending)} pending` : ""}</span>
           <span className={remaining !== null && remaining < 0 ? "overLimit" : ""}>
-            {remaining === null ? (showLimits ? "No limit set" : "") : remaining < 0 ? `${money(-remaining)} over limit` : `${money(remaining)} left of ${money(limit!)}`}
+            {remaining === null ? (showLimits ? "No limit set" : "") : accountScoped ? `${money(projected)} of ${money(limit!)} overall limit` : remaining < 0 ? `${money(-remaining)} over limit` : `${money(remaining)} left of ${money(limit!)}`}
           </span>
         </div>
       </div>;
@@ -174,6 +182,15 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   return <div className="emptyState"><WalletCards size={24} /><strong>{title}</strong><p>{detail}</p></div>;
 }
 
+function AccountSelect({ value, accounts, onChange }: {
+  value: string; accounts: CanonicalAccount[]; onChange: (value: string) => void;
+}) {
+  return <label className="accountPicker"><span>Account</span><select value={value} onChange={(event) => onChange(event.target.value)} aria-label="Select account">
+    <option value="">All accounts</option>
+    {accounts.map((account) => <option key={account.id} value={account.id}>{account.institution_name ? `${account.institution_name} · ` : ""}{account.name}{account.mask ? ` ··${account.mask}` : ""}</option>)}
+  </select></label>;
+}
+
 export default function App() {
   const [page, setPage] = useState<Page>(() => {
     const hash = window.location.hash.slice(1);
@@ -181,10 +198,17 @@ export default function App() {
   });
   const [mobileMenu, setMobileMenu] = useState(false);
   const [month, setMonth] = useState(currentMonth);
+  const [accountId, setAccountId] = useState("");
+  const [accounts, setAccounts] = useState<CanonicalAccount[]>([]);
+  const [reportStart, setReportStart] = useState(reportStartKey);
+  const [reportEnd, setReportEnd] = useState(todayKey);
+  const [transactionStart, setTransactionStart] = useState("");
+  const [transactionEnd, setTransactionEnd] = useState("");
+  const [transactionCategory, setTransactionCategory] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
-  const [summary, setSummary] = useState<MonthlySummary[]>([]);
-  const [spending, setSpending] = useState<CategorySpending[]>([]);
+  const [overviewReport, setOverviewReport] = useState<SpendingReport | null>(null);
+  const [rangeReport, setRangeReport] = useState<SpendingReport | null>(null);
   const [limits, setLimits] = useState<MonthlyLimit[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [plaidItems, setPlaidItems] = useState<PlaidItem[]>([]);
@@ -216,31 +240,52 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const openCategory = (categoryId: string, startDate: string, endDate: string) => {
+    setTransactionCategory(categoryId);
+    setTransactionStart(startDate);
+    setTransactionEnd(endDate);
+    setSearchInput("");
+    setSearchQuery("");
+    navigate("transactions");
+  };
+
   const refresh = useCallback(async () => {
     const { start, end } = monthRange(month);
     const query = new URLSearchParams({ limit: "100" });
     if (searchQuery) query.set("query", searchQuery);
+    if (accountId) query.set("account_id", accountId);
+    if (transactionStart) query.set("start_date", transactionStart);
+    if (transactionEnd) query.set("end_date", transactionEnd);
+    if (transactionCategory) query.set("category_id", transactionCategory);
+    const overviewQuery = new URLSearchParams({ start_date: start, end_date: end });
+    const reportQuery = new URLSearchParams({ start_date: reportStart, end_date: reportEnd });
+    if (accountId) { overviewQuery.set("account_id", accountId); reportQuery.set("account_id", accountId); }
+    const recentQuery = new URLSearchParams({ limit: "5" });
+    if (accountId) recentQuery.set("account_id", accountId);
     const urls = [
-      `/transactions?${query}`, "/analytics/monthly-summary",
-      `/analytics/category-spending?start_date=${start}&end_date=${end}`,
+      `/transactions?${query}`, `/analytics/spending-report?${overviewQuery}`,
+      `/analytics/spending-report?${reportQuery}`,
       "/budgets/monthly-limits", "/categorization/categories", "/plaid/items",
-      "/categorization/jobs?limit=100", "/categorization/summary", "/transactions?limit=5",
+      "/categorization/jobs?limit=100", "/categorization/summary", `/transactions?${recentQuery}`,
+      "/accounts",
     ];
     try {
       const responses = await Promise.all(urls.map((url) => fetch(`${API_BASE_URL}${url}`)));
-      const [nextTransactions, nextSummary, nextSpending, nextLimits, nextCategories, nextItems, nextJobs, nextCategorizationSummary, nextRecent] = await Promise.all([
-        readJson<Transaction[]>(responses[0]), readJson<MonthlySummary[]>(responses[1]),
-        readJson<CategorySpending[]>(responses[2]), readJson<MonthlyLimit[]>(responses[3]),
+      const [nextTransactions, nextOverview, nextRange, nextLimits, nextCategories, nextItems, nextJobs, nextCategorizationSummary, nextRecent, nextAccounts] = await Promise.all([
+        readJson<Transaction[]>(responses[0]), readJson<SpendingReport>(responses[1]),
+        readJson<SpendingReport>(responses[2]), readJson<MonthlyLimit[]>(responses[3]),
         readJson<Category[]>(responses[4]), readJson<PlaidItem[]>(responses[5]),
         readJson<CategorizationJob[]>(responses[6]), readJson<CategorizationSummary>(responses[7]),
         readJson<Transaction[]>(responses[8]),
+        readJson<CanonicalAccount[]>(responses[9]),
       ]);
       setTransactions(nextTransactions);
       setRecentTransactions(nextRecent);
-      setSummary(nextSummary);
-      setSpending(nextSpending);
+      setOverviewReport(nextOverview);
+      setRangeReport(nextRange);
       setLimits(nextLimits);
       setCategories(nextCategories);
+      setAccounts(nextAccounts);
       setPlaidItems(nextItems);
       setJobs(nextJobs);
       setCategorizationSummary(nextCategorizationSummary);
@@ -249,28 +294,31 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [month, searchQuery]);
+  }, [month, accountId, reportStart, reportEnd, searchQuery, transactionStart, transactionEnd, transactionCategory]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const selectedSummary = summary.find((row) => `${row.year}-${String(row.month).padStart(2, "0")}` === month);
-  const postedOut = Number(selectedSummary?.posted_debits ?? 0);
-  const pendingOut = Number(selectedSummary?.pending_debits ?? 0);
-  const postedIn = Number(selectedSummary?.posted_credits ?? 0);
-  const pendingIn = Number(selectedSummary?.pending_credits ?? 0);
+  const postedOut = Number(overviewReport?.summary.posted_spending ?? 0);
+  const pendingOut = Number(overviewReport?.summary.pending_spending ?? 0);
+  const postedIn = Number(overviewReport?.summary.posted_money_in ?? 0);
+  const pendingIn = Number(overviewReport?.summary.pending_money_in ?? 0);
   const categoryTotals = useMemo(() => {
-    const grouped = new Map<string, CategoryTotal>();
-    for (const row of spending) {
-      const existing = grouped.get(row.parent_category_id) ?? {
-        id: row.parent_category_id, name: row.parent_category, posted: 0, pending: 0,
-      };
-      existing.posted += Number(row.posted_amount);
-      existing.pending += Number(row.pending_amount);
-      grouped.set(row.parent_category_id, existing);
-    }
-    return [...grouped.values()].sort((a, b) => (b.posted + b.pending) - (a.posted + a.pending));
-  }, [spending]);
+    return (overviewReport?.categories ?? []).map((row) => ({
+      id: row.parent_category_id, name: row.parent_category,
+      posted: Number(row.posted_amount), pending: Number(row.pending_amount),
+    }));
+  }, [overviewReport]);
   const topCategories = categoryTotals.slice(0, 5);
+  const rangeCategories = (rangeReport?.categories ?? []).map((row) => ({
+    id: row.parent_category_id, name: row.parent_category,
+    posted: Number(row.posted_amount), pending: Number(row.pending_amount),
+  }));
+  const rangeSummary = rangeReport?.summary;
+  const movementOut = Number(overviewReport?.summary.posted_movements_out ?? 0)
+    + Number(overviewReport?.summary.pending_movements_out ?? 0);
+  const movementIn = Number(overviewReport?.summary.posted_movements_in ?? 0)
+    + Number(overviewReport?.summary.pending_movements_in ?? 0);
+  const selectedCategoryName = categories.find((category) => category.category_id === transactionCategory)?.display_name ?? transactionCategory;
   const expenseCategories = categories.filter((category) => category.category_id !== "income" && category.category_id !== "other");
 
   const runAction = async (action: () => Promise<void>) => {
@@ -397,6 +445,7 @@ export default function App() {
     <span>Period</span>
     <input type="month" value={month} max={currentMonth()} onChange={(event) => { if (event.target.value) setMonth(event.target.value); }} aria-label="Select month" />
   </label>;
+  const accountSelect = <AccountSelect value={accountId} accounts={accounts} onChange={setAccountId} />;
 
   return <div className="appShell">
     <aside className={`sidebar ${mobileMenu ? "sidebarOpen" : ""}`}>
@@ -425,30 +474,35 @@ export default function App() {
       {loading && <p className="loadingText">Loading your financial picture…</p>}
 
       {page === "overview" && <>
-        <div className="pageHeading"><div><div className="eyebrow">OVERVIEW</div><h1>Financial overview</h1><p>A clear view of what came in, what went out, and what is still pending.</p></div>{monthSelect}</div>
-        {summary.length === 0 && <div className="welcomeBanner"><div><strong>Start with your transactions</strong><p>Connect a bank or upload a statement to see your cash flow and spending patterns.</p></div><button className="primaryButton" onClick={() => navigate("accounts")}>Go to accounts <ArrowRight size={16} /></button></div>}
+        <div className="pageHeading"><div><div className="eyebrow">OVERVIEW</div><h1>Financial overview</h1><p>Spending and money in, with transfers and card payments tracked separately.</p></div><div className="headingFilters">{accountSelect}{monthSelect}</div></div>
+        {!loading && accounts.length === 0 && <div className="welcomeBanner"><div><strong>Start with your transactions</strong><p>Connect a bank or upload a statement to see your cash flow and spending patterns.</p></div><button className="primaryButton" onClick={() => navigate("accounts")}>Go to accounts <ArrowRight size={16} /></button></div>}
         <section className="summaryGrid" aria-label="Cash flow summary">
-          <SummaryCard label="Money out" posted={postedOut} pending={pendingOut} tone="out" note="This month" />
-          <SummaryCard label="Money in" posted={postedIn} pending={pendingIn} tone="in" note="Includes all credits" />
-          <SummaryCard label="Net cash flow" posted={postedIn - postedOut} pending={pendingIn - pendingOut} tone="net" note="In minus out" />
+          <SummaryCard label="Spending" posted={postedOut} pending={pendingOut} tone="out" note="Movements excluded" />
+          <SummaryCard label="Money in" posted={postedIn} pending={pendingIn} tone="in" note="Includes refunds" />
+          <SummaryCard label="Net flow" posted={postedIn - postedOut} pending={pendingIn - pendingOut} tone="net" note="Excludes movements" />
         </section>
+        {(movementOut > 0 || movementIn > 0) && <p className="movementNote">{money(movementOut)} moved out and {money(movementIn)} moved in through transfers or card payments. These are shown in Transactions and excluded from spending and net flow.</p>}
         <div className="dashboardGrid">
-          <section className="surface trendPanel"><div className="sectionTitle"><div><span className="eyebrow">THE BIG PICTURE</span><h2>Cash flow trend</h2></div><span className="sectionHint">Last 6 months</span></div><TrendChart rows={summary} /></section>
-          <section className="surface categoryPanel"><div className="sectionTitle"><div><span className="eyebrow">WHERE IT WENT</span><h2>Top 5 categories</h2></div><button className="textButton" onClick={() => navigate("reports")}>All categories <ArrowRight size={15} /></button></div><p className="sectionDescription">Projected spending includes posted and pending transactions.</p><CategoryBars rows={topCategories} limits={limits} showLimits={month === currentMonth()} /><button className="textButton manageLink" onClick={() => navigate("settings")}>Manage monthly limits <ArrowRight size={15} /></button></section>
+          <section className="surface trendPanel"><div className="sectionTitle"><div><span className="eyebrow">THE BIG PICTURE</span><h2>Money in vs. spending</h2></div><span className="sectionHint">Report date range</span></div><TrendChart rows={rangeReport?.months ?? []} /></section>
+          <section className="surface categoryPanel"><div className="sectionTitle"><div><span className="eyebrow">WHERE IT WENT</span><h2>Top 5 categories</h2></div><button className="textButton" onClick={() => navigate("reports")}>All categories <ArrowRight size={15} /></button></div><p className="sectionDescription">Projected spending includes posted and pending transactions.</p><CategoryBars rows={topCategories} limits={limits} showLimits={month === currentMonth()} accountScoped={Boolean(accountId)} onSelect={(id) => { const range = monthRange(month); openCategory(id, range.start, range.end); }} /><button className="textButton manageLink" onClick={() => navigate("settings")}>Manage monthly limits <ArrowRight size={15} /></button></section>
         </div>
         <section className="surface recentPanel"><div className="sectionTitle"><div><span className="eyebrow">LATEST ACTIVITY</span><h2>Recent transactions</h2></div><button className="textButton" onClick={() => navigate("transactions")}>View all <ArrowRight size={15} /></button></div><TransactionList rows={recentTransactions} compact /></section>
       </>}
 
       {page === "transactions" && <>
-        <div className="pageHeading"><div><div className="eyebrow">ACTIVITY</div><h1>Transactions</h1><p>Find activity and keep categories accurate.</p></div><span className="pageCount">Latest 100 results</span></div>
+        <div className="pageHeading"><div><div className="eyebrow">ACTIVITY</div><h1>Transactions</h1><p>Find activity and keep categories accurate.</p></div>{accountSelect}</div>
+        <div className="transactionFilters"><label>From<input type="date" value={transactionStart} max={transactionEnd || undefined} onChange={(event) => setTransactionStart(event.target.value)} /></label><label>To<input type="date" value={transactionEnd} min={transactionStart || undefined} onChange={(event) => setTransactionEnd(event.target.value)} /></label><label>Category<select value={transactionCategory} onChange={(event) => setTransactionCategory(event.target.value)}><option value="">All categories</option>{categories.map((category) => <option key={category.category_id} value={category.category_id}>{category.display_name}</option>)}</select></label>{(transactionStart || transactionEnd || transactionCategory) && <button className="textButton" onClick={() => { setTransactionStart(""); setTransactionEnd(""); setTransactionCategory(""); }}>Clear activity filters</button>}</div>
+        {transactionCategory && <p className="filterContext">Showing {selectedCategoryName} transactions. Category changes here update your reports.</p>}
         <section className="surface"><form className="searchBar" onSubmit={(event) => { event.preventDefault(); setSearchQuery(searchInput.trim()); }}><Search size={18} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search merchant or description" aria-label="Search transactions" /><button className="primaryButton" type="submit">Search</button>{searchQuery && <button className="textButton" type="button" onClick={() => { setSearchInput(""); setSearchQuery(""); }}>Clear</button>}</form><div className="tableWrap"><table className="transactionTable"><thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Account</th><th className="amountCell">Amount</th></tr></thead><tbody>{transactions.map((transaction) => <tr key={transaction.id}><td>{transaction.posted_date}</td><td><strong>{transaction.canonical_merchant_name ?? transaction.description}</strong><small>{transaction.is_pending ? "Pending" : "Posted"}</small></td><td><select aria-label={`Category for ${transaction.description}`} value={transaction.subcategory_id ?? ""} onChange={(event) => updateCategory(transaction.id, event.target.value)} disabled={busy}><option value="">Uncategorized</option>{categories.map((category) => <optgroup key={category.category_id} label={category.display_name}>{category.subcategories.map((sub) => <option key={sub.category_id} value={sub.category_id}>{sub.display_name}</option>)}</optgroup>)}</select></td><td>{transaction.account_name}</td><td className={`amountCell ${transaction.direction === "credit" ? "positive" : ""}`}>{transaction.direction === "credit" ? "+" : "−"}{money(Number(transaction.amount))}</td></tr>)}</tbody></table>{transactions.length === 0 && <EmptyState title={searchQuery ? "No matching transactions" : "No transactions yet"} detail={searchQuery ? "Try a different search." : "Connect a bank or import a statement to get started."} />}</div></section>
       </>}
 
       {page === "reports" && <>
-        <div className="pageHeading"><div><div className="eyebrow">PATTERNS</div><h1>Reports</h1><p>Compare cash flow over time and explore where spending happened.</p></div>{monthSelect}</div>
-        <div className="reportSummary"><div className="reportMetric"><span>Posted money out</span><strong>{money(postedOut)}</strong></div><div className="reportMetric"><span>Posted money in</span><strong>{money(postedIn)}</strong></div><div className="reportMetric"><span>Posted net flow</span><strong>{money(postedIn - postedOut)}</strong></div></div>
-        <section className="surface reportTrend"><div className="sectionTitle"><div><span className="eyebrow">MONTH BY MONTH</span><h2>Cash flow trend</h2></div></div><TrendChart rows={summary} /></section>
-        <section className="surface"><div className="sectionTitle"><div><span className="eyebrow">SPENDING DETAIL</span><h2>{monthLabel(month)} by category</h2></div></div><p className="sectionDescription">Posted spending with pending activity shown separately. Monthly limits appear on the current month.</p><CategoryBars rows={categoryTotals} limits={limits} showLimits={month === currentMonth()} /></section>
+        <div className="pageHeading"><div><div className="eyebrow">PATTERNS</div><h1>Reports</h1><p>Explore spending by account, category, and time. Transfers and card payments are excluded.</p></div>{accountSelect}</div>
+        <div className="reportFilters"><label>From<input type="date" value={reportStart} max={reportEnd} onChange={(event) => { if (event.target.value) setReportStart(event.target.value); }} /></label><label>To<input type="date" value={reportEnd} min={reportStart} max={todayKey()} onChange={(event) => { if (event.target.value) setReportEnd(event.target.value); }} /></label><span>All charts below use this date range and account.</span></div>
+        <div className="reportSummary"><div className="reportMetric"><span>Posted spending</span><strong>{money(Number(rangeSummary?.posted_spending ?? 0))}</strong></div><div className="reportMetric"><span>Posted money in</span><strong>{money(Number(rangeSummary?.posted_money_in ?? 0))}</strong></div><div className="reportMetric"><span>Posted net flow</span><strong>{money(Number(rangeSummary?.posted_money_in ?? 0) - Number(rangeSummary?.posted_spending ?? 0))}</strong></div></div>
+        <section className="surface reportTrend"><div className="sectionTitle"><div><span className="eyebrow">MONTH BY MONTH</span><h2>Money in vs. spending</h2></div></div><TrendChart rows={rangeReport?.months ?? []} /></section>
+        {rangeReport && <div className="reportVisualGrid"><section className="surface"><div className="sectionTitle"><div><span className="eyebrow">CATEGORY TRENDS</span><h2>How spending changed</h2></div></div><p className="sectionDescription">Posted spending by month. Select a segment to see its transactions.</p><CategoryTrend report={rangeReport} onSelect={(id, selectedMonth) => { const range = selectedMonth ? monthRange(selectedMonth) : { start: reportStart, end: reportEnd }; openCategory(id, range.start < reportStart ? reportStart : range.start, range.end > reportEnd ? reportEnd : range.end); }} /></section><section className="surface"><div className="sectionTitle"><div><span className="eyebrow">CATEGORY SHARE</span><h2>Where spending went</h2></div></div><p className="sectionDescription">Share of posted spending in the selected range.</p><CategoryShare report={rangeReport} onSelect={(id) => openCategory(id, reportStart, reportEnd)} /></section></div>}
+        <section className="surface"><div className="sectionTitle"><div><span className="eyebrow">SPENDING DETAIL</span><h2>Categories in this range</h2></div></div><p className="sectionDescription">Posted and pending amounts are separate. Budgets remain global across all accounts.</p><CategoryBars rows={rangeCategories} limits={limits} showLimits={false} onSelect={(id) => openCategory(id, reportStart, reportEnd)} /></section>
       </>}
 
       {page === "accounts" && <>

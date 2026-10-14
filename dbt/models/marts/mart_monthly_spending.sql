@@ -13,4 +13,5 @@ select
     sum(case when not is_pending then 1 else 0 end) as posted_transaction_count,
     sum(case when is_pending then 1 else 0 end) as pending_transaction_count
 from {{ ref('fct_transactions') }}
+where category_id not in ('financial_transfers', 'financial_credit_card_payment')
 group by 1

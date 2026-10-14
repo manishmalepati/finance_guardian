@@ -7,6 +7,7 @@ from backend.common.exceptions import IngestionError
 from backend.db.models import IngestionRun, StatementDocument, StatementRawTransaction, Transaction
 from backend.ingestion.adapters.factory import AdapterFactory
 from backend.repositories.transactions import TransactionRepository
+from backend.services.accounts import AccountService
 from backend.services.categorization import CategorizationService
 
 
@@ -46,6 +47,7 @@ class IngestionService:
             self.session.add(statement_document)
             self.session.flush()
 
+            accounts = AccountService(self.session)
             for index, parsed in enumerate(parsed_transactions, start=1):
                 source_key = self._statement_row_hash(file_hash=file_hash, row_number=index, parsed=parsed)
                 canonical_transaction = Transaction(
@@ -56,6 +58,7 @@ class IngestionService:
                     description=parsed.description,
                     amount=parsed.amount,
                     direction=parsed.direction,
+                    account_id=accounts.statement_account(source, parsed.account_name).id,
                     account_name=parsed.account_name,
                     category_hint=parsed.category_hint,
                     page_number=parsed.page_number,

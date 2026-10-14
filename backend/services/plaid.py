@@ -121,6 +121,7 @@ class PlaidService:
                 "accounts": [
                     {
                         "account_id": account.source_account_key,
+                        "canonical_account_id": account.id,
                         "name": account.name,
                         "official_name": account.official_name,
                         "mask": account.mask,

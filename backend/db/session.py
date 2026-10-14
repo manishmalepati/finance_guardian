@@ -12,6 +12,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 def init_database() -> None:
     import backend.db.models  # noqa: F401
+    from backend.services.accounts import AccountService
     from backend.services.categorization import CategorizationService
 
     with engine.begin() as connection:
@@ -22,6 +23,7 @@ def init_database() -> None:
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as session:
         CategorizationService(session).seed_defaults()
+        AccountService(session).link_legacy_statements()
 
 
 def get_session() -> Generator[Session, None, None]:

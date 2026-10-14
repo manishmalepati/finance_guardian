@@ -1,4 +1,5 @@
 from datetime import date
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -15,10 +16,14 @@ def list_transactions(
     start_date: date | None = None,
     end_date: date | None = None,
     query: str | None = None,
+    account_id: UUID | None = None,
+    category_id: str | None = None,
+    merchant: str | None = None,
     session: Session = Depends(get_session),
 ) -> list[dict]:
     rows = TransactionRepository(session).list_transaction_details(
-        limit=limit, start_date=start_date, end_date=end_date, query=query
+        limit=limit, start_date=start_date, end_date=end_date, query=query,
+        account_id=str(account_id) if account_id else None, category_id=category_id, merchant=merchant,
     )
     output = []
     for transaction, categorization, category, parent_category in rows:
@@ -32,6 +37,7 @@ def list_transactions(
                 "status": transaction.status,
                 "is_pending": transaction.is_pending,
                 "account_name": transaction.account_name,
+                "account_id": transaction.account_id,
                 "category_hint": transaction.category_hint,
                 "plaid_pfc_primary": transaction.plaid_pfc_primary,
                 "plaid_pfc_detailed": transaction.plaid_pfc_detailed,

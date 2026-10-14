@@ -1,5 +1,7 @@
 select
+    c.parent_category_id,
     c.parent_category,
+    c.category_id,
     c.subcategory,
     date_trunc('month', t.posted_date)::date as month,
     sum(t.amount) as amount,
@@ -11,4 +13,5 @@ select
 from {{ ref('fct_transactions') }} t
 join {{ ref('dim_categories') }} c using (category_id)
 where t.direction = 'debit'
-group by 1, 2, 3
+  and c.category_id not in ('financial_transfers', 'financial_credit_card_payment')
+group by 1, 2, 3, 4, 5

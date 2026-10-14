@@ -57,15 +57,31 @@ strategy, Plaid sync lifecycle, PFC mapping strategy, and planned LLM tool surfa
 ## Dashboard
 
 The dark dashboard is organized into Overview, Transactions, Reports, Accounts,
-and Settings. Overview shows posted money in and out as the main figures, with
-pending transactions shown separately and included in projected totals. Reports
-uses posted transactions for its monthly trend. "Money in" currently includes
-all credits, including refunds and transfers that have not been classified.
+and Settings. Overview shows posted spending, money in, and net flow as the main
+figures. Pending amounts appear separately and are included in projected totals.
+Known transfers and credit card payments appear as money movements, separate
+from spending, money in, and net flow. Money in includes refunds; unclassified
+transfers can still appear there until they are categorized.
+
+Overview and Reports can be filtered to one canonical account or all accounts.
+Reports has a date range, monthly cash-flow comparison, category trend, and
+category share. Selecting a category opens its transactions with the same date
+range and account filter. Transactions also supports account, date, category,
+and search filters. Reports use posted amounts for trend and share charts.
 
 Top spending categories compare posted and pending spending with recurring
 monthly limits. Set or remove a parent-category limit in Settings. Limits apply
-to the current month chart; historical months show spending without a limit
-marker because past limit versions are not stored.
+to the current month chart across all accounts; when one account is selected,
+its spending is compared with that global limit. Historical months show spending
+without a limit marker because past limit versions are not stored.
+
+Analytics endpoints:
+
+```text
+GET /accounts
+GET /analytics/spending-report?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID]
+GET /transactions?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID][&category_id=ID]
+```
 
 Budget endpoints:
 

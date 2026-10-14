@@ -24,6 +24,9 @@ Only the current month shows limit markers because the table does not retain
 historical versions. Custom periods, rollover, and past budget snapshots belong
 to the later Plan workflow.
 
+Limits are global across accounts. An account filter changes the spending shown
+against a limit but does not change the limit itself.
+
 ## Plaid-First Identity
 
 Plaid IDs are first-class external keys, but local UUIDs remain primary keys.
@@ -35,6 +38,13 @@ manual records, and future providers.
 - `core.transactions.plaid_transaction_id`: unique Plaid transaction ID when present.
 - `raw.plaid_transactions.plaid_transaction_id`: provider-native transaction record.
 - `raw.plaid_sync_runs`: one attempted Plaid transaction sync for an Item.
+
+`core.transactions.account_id` points to `core.financial_accounts.id`. Plaid
+accounts retain the Plaid account ID as `source_account_key`. Statement imports
+receive a separate canonical account keyed by source and normalized account
+name; older statement rows without an account are linked on startup. Statement
+and Plaid accounts remain separate until reconciliation can establish a match.
+The `/accounts` API exposes canonical IDs for account filters.
 
 `core.transactions` is the table that analytics, categorization, the API, and
 LLM tools should read from. Raw Plaid rows point to the canonical transaction
@@ -86,6 +96,28 @@ Analytics distinguish settled reports from fresh estimates:
 - `pending_*` fields include pending transactions.
 - Financial reports should use posted fields by default; dashboard previews may
   use headline totals to include pending activity.
+
+## Spending and Cash-Flow Semantics
+
+The active categories `financial_transfers` and
+`financial_credit_card_payment` identify money movements. Their debits and
+credits remain visible in Transactions, but are excluded from spending, money
+in, and net flow. The spending report exposes them separately as posted and
+pending movements in and out. Other debit transactions count as spending;
+other credits count as money in, including refunds. A transfer or payment that
+is uncategorized may affect spending or money in until it is classified.
+
+`GET /analytics/spending-report` accepts an inclusive date range and optional
+canonical `account_id`. It provides posted and pending summary amounts, monthly
+totals, parent-category totals, and parent-category totals by month. Overview
+uses the selected month; Reports uses the selected range. Category trend and
+share visuals use posted spending. Selecting a category opens Transactions with
+the same account and date filters.
+
+dbt's `mart_spending_by_account_category_month` uses month, canonical account,
+and category as its grain and retains posted and pending amounts. The dashboard
+report API currently aggregates canonical transactions directly; the mart gives
+downstream analytics a matching account-aware grain.
 
 ## Plaid Personal Finance Categories
 
