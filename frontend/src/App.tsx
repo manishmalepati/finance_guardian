@@ -140,11 +140,14 @@ function CategoryBars({ rows, limits, showLimits = true }: {
 }) {
   const limitMap = new Map(limits.map((limit) => [limit.category_id, Number(limit.amount)]));
   if (rows.length === 0) return <EmptyState title="No spending for this month" detail="Category spending will appear after transactions are synced or imported." />;
+  const scale = Math.max(1, ...rows.flatMap((row) => [
+    row.posted + row.pending,
+    showLimits ? (limitMap.get(row.id) ?? 0) : 0,
+  ]));
   return <div className="categoryBars">
     {rows.map((row) => {
       const limit = showLimits ? limitMap.get(row.id) : undefined;
       const projected = row.posted + row.pending;
-      const scale = Math.max(projected, limit ?? 0, 1);
       const postedWidth = Math.max(0, Math.min(100, (row.posted / scale) * 100));
       const pendingWidth = Math.max(0, Math.min(100 - postedWidth, (row.pending / scale) * 100));
       const remaining = limit === undefined ? null : limit - projected;
