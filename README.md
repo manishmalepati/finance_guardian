@@ -49,9 +49,47 @@ The v2 data model is Plaid-first and split into source-native and canonical laye
 - `raw.statement_transactions`: parsed statement rows with deterministic row hashes.
 - `core.financial_accounts`: canonical account metadata, Plaid-backed where available.
 - `core.transactions`: canonical transactions consumed by categorization, dbt, analytics, and the agent.
+- `planning.monthly_category_limits`: recurring monthly limits for parent spending categories.
 
 See `docs/data-architecture-v2.md` for the identity model, PDF reconciliation
 strategy, Plaid sync lifecycle, PFC mapping strategy, and planned LLM tool surface.
+
+## Dashboard
+
+The dark dashboard is organized into Overview, Transactions, Reports, Accounts,
+and Settings. Overview shows posted spending, money in, and net flow as the main
+figures. Pending amounts appear separately and are included in projected totals.
+Known transfers and credit card payments appear as money movements, separate
+from spending, money in, and net flow. Money in includes refunds; unclassified
+transfers can still appear there until they are categorized.
+
+Overview and Reports can be filtered to one canonical account or all accounts.
+Reports has a date range, monthly cash-flow comparison, category trend, and
+category share. Selecting a category opens its transactions with the same date
+range and account filter. Transactions also supports account, date, category,
+and search filters. Reports use posted amounts for trend and share charts.
+
+Top spending categories compare posted and pending spending with recurring
+monthly limits. Set or remove a parent-category limit in Settings. Limits apply
+to the current month chart across all accounts; when one account is selected,
+its spending is compared with that global limit. Historical months show spending
+without a limit marker because past limit versions are not stored.
+
+Analytics endpoints:
+
+```text
+GET /accounts
+GET /analytics/spending-report?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID]
+GET /transactions?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID][&category_id=ID]
+```
+
+Budget endpoints:
+
+```text
+GET    /budgets/monthly-limits
+PUT    /budgets/monthly-limits/{parent_category_id}  {"amount": "500.00"}
+DELETE /budgets/monthly-limits/{parent_category_id}
+```
 
 For a clean local rebuild after schema changes:
 
@@ -71,10 +109,38 @@ PLAID_ENV=sandbox
 PLAID_PRODUCTS=transactions
 PLAID_COUNTRY_CODES=US
 PLAID_CLIENT_NAME=Finance Guardian
+PLAID_VAULT_KEY=your_fernet_key
 ```
 
-Sandbox test credentials can be used through Plaid Link. For production hardening,
-encrypt Plaid access tokens before storing them outside a local development database.
+Generate `PLAID_VAULT_KEY` once and keep it in your ignored `.env` file:
+
+```bash
+docker compose exec backend python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Restart the backend after adding the key. It migrates existing Plaid access
+tokens to encrypted database values and writes an encrypted vault at
+`.local/plaid-vault-<environment>.enc`. The `.local` directory is bind-mounted
+and survives `docker compose down -v`; preserve both the vault file and its key.
+The vault is tied to the Plaid environment and client ID. Keep Sandbox and
+Production credentials, keys, vaults, and data separate. Never commit the key
+or vault, copy tokens into frontend code, or make unencrypted backups.
+Docker exposes the frontend, API, and Postgres only on localhost. This is a
+single-user local development setup; it has no application login.
+
+After a database reset, startup restores the existing Plaid Items and attempts
+to sync available history from a fresh cursor. If sync needs bank consent,
+choose **Reauthenticate** on the existing institution and then sync again.
+Do not start a new Link connection for the same bank. Plaid may not return older
+history that is no longer available through the Item; preserve the database
+when you need full history. Prefer migrations over resetting the database for
+future schema changes.
+
+Plaid [Sandbox](https://plaid.com/docs/sandbox/) permits unlimited test Items.
+The [Trial plan](https://plaid.com/docs/account/billing/) permits 10 Production
+Items total; removing an Item does not restore a slot. Repeated API calls on an
+existing Item do not create another Item. Confirm your Plaid plan before using
+real bank data.
 
 ## Useful Commands
 

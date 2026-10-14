@@ -18,3 +18,22 @@ models:
       - name: month
         tests:
           - not_null
+  - name: mart_spending_by_account_category_month
+    columns:
+      - name: grain_key
+        tests:
+          - unique
+          - not_null
+      - name: month
+        tests:
+          - not_null
+      - name: account_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_accounts')
+                field: account_id
+      - name: category_id
+        tests:
+          - not_null

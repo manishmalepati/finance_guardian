@@ -1,4 +1,8 @@
-select distinct
-    coalesce(account_id::text, md5(account_name)) as account_id,
-    account_name
-from {{ ref('stg_transactions') }}
+select
+    id::text as account_id,
+    name as account_name,
+    source,
+    account_type,
+    mask,
+    iso_currency_code
+from {{ source('core', 'financial_accounts') }}
