@@ -72,6 +72,9 @@ declare global {
 const money = (value: number) => new Intl.NumberFormat("en-US", {
   style: "currency", currency: "USD", maximumFractionDigits: 2,
 }).format(value);
+const budgetMoney = (value: number) => new Intl.NumberFormat("en-US", {
+  style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 2,
+}).format(value);
 const shortMoney = (value: number) => new Intl.NumberFormat("en-US", {
   style: "currency", currency: "USD", maximumFractionDigits: 0,
 }).format(value);
@@ -156,25 +159,38 @@ function CategoryBars({ rows, limits, showLimits = true, accountScoped = false, 
     {rows.map((row) => {
       const limit = showLimits ? limitMap.get(row.id) : undefined;
       const projected = row.posted + row.pending;
+      const hasLimit = limit !== undefined && limit > 0;
+      const progress = hasLimit ? Math.max(0, projected / limit) : 0;
+      const overage = hasLimit ? Math.max(0, projected - limit) : 0;
+      const overflowWidth = overage > 0 && projected > 0 ? (overage / projected) * 100 : 0;
       const postedWidth = Math.max(0, Math.min(100, (row.posted / scale) * 100));
       const pendingWidth = Math.max(0, Math.min(100 - postedWidth, (row.pending / scale) * 100));
-      const remaining = limit === undefined ? null : limit - projected;
+      const remaining = hasLimit ? limit - projected : null;
       return <div className="categoryBar" key={row.id}>
-        <div className="categoryBarTop">{onSelect ? <button className="categoryNameButton" onClick={() => onSelect(row.id)}>{row.name} <ArrowRight size={13} /></button> : <strong>{row.name}</strong>}<span>{money(projected)}</span></div>
-        <div className="categoryTrack" role="img" aria-label={`${row.name}: ${money(row.posted)} posted, ${money(row.pending)} pending${limit === undefined ? "" : `, ${money(limit)} monthly limit`}`}>
-          <div className="categoryPosted" style={{ width: `${postedWidth}%` }} />
-          <div className="categoryPending" style={{ width: `${pendingWidth}%` }} />
-          {limit !== undefined && <span className="limitMarker" style={{ left: `${Math.min(99, (limit / scale) * 100)}%` }} />}
+        <div className="categoryBarTop">{onSelect ? <button className="categoryNameButton" onClick={() => onSelect(row.id)}>{row.name} <ArrowRight size={13} /></button> : <strong>{row.name}</strong>}<span>{hasLimit ? `${budgetMoney(projected)} / ${budgetMoney(limit)}` : money(projected)}</span></div>
+        <div className="categoryProgressRow">
+          <div className={`categoryTrack ${hasLimit ? "budgetTrack" : ""}`} role="img" aria-label={hasLimit ? `${row.name}: ${budgetMoney(projected)} of ${budgetMoney(limit)} monthly limit, ${Math.round(progress * 100)} percent${overage > 0 ? `, ${budgetMoney(overage)} over` : ""}` : `${row.name}: ${money(row.posted)} posted, ${money(row.pending)} pending`}>
+            {hasLimit ? <>
+              <div className="budgetFill" style={{ width: `${Math.min(100, progress * 100)}%` }} />
+              {overage > 0 && <div className="budgetOverflow" style={{ width: `${overflowWidth}%` }} />}
+            </> : <>
+              <div className="categoryPosted" style={{ width: `${postedWidth}%` }} />
+              <div className="categoryPending" style={{ width: `${pendingWidth}%` }} />
+            </>}
+          </div>
+          {overage > 0 && <span className="budgetMultiplier">{progress.toFixed(1)}x</span>}
         </div>
         <div className="categoryBarFoot">
           <span>{money(row.posted)} posted{row.pending > 0 ? ` · ${money(row.pending)} pending` : ""}</span>
-          <span className={remaining !== null && remaining < 0 ? "overLimit" : ""}>
-            {remaining === null ? (showLimits ? "No limit set" : "") : accountScoped ? `${money(projected)} of ${money(limit!)} overall limit` : remaining < 0 ? `${money(-remaining)} over limit` : `${money(remaining)} left of ${money(limit!)}`}
+          <span className={overage > 0 ? "overLimit" : ""}>
+            {remaining === null ? (showLimits ? "No limit set" : "") : <>
+              {overage > 0 ? `+ ${budgetMoney(overage)} over${accountScoped ? " overall limit" : ""}` : accountScoped ? "Overall limit spans all accounts" : `${budgetMoney(remaining)} left`}
+              <span className="budgetPercent">{Math.round(progress * 100)}%</span>
+            </>}
           </span>
         </div>
       </div>;
     })}
-    {showLimits && <div className="barKey"><span className="keyPosted">Posted</span><span className="keyPending">Pending</span><span className="keyLimit">Monthly limit</span></div>}
   </div>;
 }
 
