@@ -14,3 +14,4 @@ PyYAML==6.0.2
 anthropic==0.67.0
 plaid-python==40.1.0
 cryptography==50.0.2
+httpx==0.28.1

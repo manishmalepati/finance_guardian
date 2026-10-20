@@ -235,6 +235,39 @@ button.stackedSegment:hover { filter: brightness(1.22); }
 .jobList small { color: #849fba; }
 .guardianPanel .searchBar { margin-top: 16px; }
 .guardianAnswer { margin-top: 17px; padding: 16px; background: #0b2038; border: 1px solid #294965; border-radius: 9px; color: #d4e9f1; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
+.transactionOpen { padding: 0; border: 0; background: none; color: #eaf2ff; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.transactionOpen:hover { color: #7ce1dc; text-decoration: underline; }
+.receiptBadge { display: inline-flex; align-items: center; padding: 4px 7px; border-radius: 999px; background: #273e55; color: #a9bed0; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.receiptBadge.matched, .receiptBadge.confirmed { background: #1f504b; color: #9ce9d4; }
+.receiptBadge.possible, .receiptBadge.suggested { background: #53452b; color: #f6d799; }
+.receiptDetail { margin-top: 17px; }
+.receiptFacts { display: flex; flex-wrap: wrap; gap: 12px 22px; padding: 13px 0; color: #91abc4; font-size: 11px; }
+.receiptFacts span { display: grid; gap: 4px; }
+.receiptFacts strong { color: #e3f1fd; font-size: 12px; }
+.receiptOrder { margin-top: 15px; padding: 18px; border: 1px solid #355573; border-radius: 11px; background: #0d223b; }
+.receiptOrderHead { display: flex; justify-content: space-between; align-items: start; gap: 15px; }
+.receiptOrderHead h3 { margin: 9px 0 0; font-size: 15px; }
+.receiptOrderHead > strong { font-size: 14px; }
+.receiptOrder h4 { margin: 14px 0 8px; font-size: 12px; }
+.receiptItem { padding: 10px 0; border-bottom: 1px solid #2d4863; }
+.receiptItem input, .receiptItem select, .receiptSearch input { min-height: 32px; padding: 6px 8px; border: 1px solid #36516d; border-radius: 6px; color: #eaf2ff; background: #0d2139; font-size: 12px; }
+.receiptItemMain, .receiptItemMeta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.receiptItemMain input { flex: 1; }
+.receiptItemMain span, .receiptItem small, .receiptSource { color: #8fa9c1; font-size: 11px; }
+.receiptItemMeta { margin: 8px 0; }
+.receiptItemMeta label { display: flex; align-items: center; gap: 8px; color: #91abc4; font-size: 11px; }
+.receiptCharges { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 16px; margin-top: 16px; text-transform: capitalize; font-size: 11px; color: #93adc4; }
+.receiptCharges span { display: flex; justify-content: space-between; }
+.receiptCharges strong { color: #dbeaf6; }
+.receiptSource { margin: 16px 0; overflow-wrap: anywhere; }
+.receiptSearch { display: flex; align-items: end; gap: 9px; margin-top: 18px; }
+.receiptSearch label { display: grid; flex: 1; gap: 5px; color: #9eb4ca; font-size: 11px; }
+.receiptResults > div, .gmailConnection { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 12px 0; border-top: 1px solid #2b4966; font-size: 12px; }
+.gmailConnection { align-items: start; margin-top: 14px; }
+.gmailConnection strong, .gmailConnection span, .gmailConnection small { display: block; }
+.gmailConnection span, .gmailConnection small { margin-top: 5px; color: #91abc4; }
+.gmailPanel { margin-bottom: 17px; }
+.dangerLink { color: #ffadb6; }
 
 @media (max-width: 1120px) {
   .mainContent { padding-inline: 26px; }
@@ -258,6 +291,8 @@ button.stackedSegment:hover { filter: brightness(1.22); }
   .topbarDate { display: none; }
   .transactionTable { min-width: 680px; }
   .welcomeBanner, .importPanel { align-items: flex-start; flex-direction: column; }
+  .receiptOrderHead, .receiptSearch, .receiptItemMain, .receiptItemMeta, .gmailConnection { align-items: stretch; flex-direction: column; }
+  .receiptCharges { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
   .mainContent { padding-inline: 14px; }

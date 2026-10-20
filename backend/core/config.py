@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     plaid_client_name: str = "Finance Guardian"
     plaid_vault_key: str = ""
     plaid_vault_path: str = ""
+    gmail_client_id: str = ""
+    gmail_client_secret: str = ""
+    gmail_redirect_uri: str = "http://localhost:8000/gmail/callback"
+    gmail_token_key: str = ""
+    demo_mode: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -66,6 +71,12 @@ class Settings(BaseSettings):
     @property
     def plaid_country_code_list(self) -> list[str]:
         return [country.strip().upper() for country in self.plaid_country_codes.split(",") if country.strip()]
+
+    def require_gmail_configuration(self) -> None:
+        if not all((self.gmail_client_id.strip(), self.gmail_client_secret.strip(), self.gmail_token_key.strip())):
+            raise ConfigurationError("Gmail is not configured. Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_TOKEN_KEY.")
+        if self.gmail_redirect_uri != "http://localhost:8000/gmail/callback":
+            raise ConfigurationError("This local prototype requires GMAIL_REDIRECT_URI=http://localhost:8000/gmail/callback.")
 
 
 settings = Settings()

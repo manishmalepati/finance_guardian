@@ -13,6 +13,26 @@ The database is split into source-native facts and canonical product facts:
 - `enrichment`: categories, merchant aliases, and user/LLM categorization.
 - `analytics`: dbt-derived marts for summaries, comparisons, and agent tools.
 - `planning`: recurring parent-category spending limits used by the dashboard.
+- `receipt`: Gmail connection and sync state, minimal email provenance,
+  normalized orders and items, and reviewed links to canonical transactions.
+
+Receipt records enrich `core.transactions` but do not enter the money ledger or
+dbt spending marts. `receipt.transaction_order_matches` permits multiple
+transactions per order and multiple orders per transaction, with a status and
+evidence on each link. A strong, unique amount/currency/merchant/date candidate
+may be confirmed automatically; uncertain links remain suggestions. When Plaid
+replaces a pending charge with a posted charge, receipt links follow the posted
+canonical transaction.
+The same idempotent matcher runs after either bank or Gmail sync, so source
+arrival order does not matter. It preserves user confirmations and rejections,
+and it demotes automatic confirmations if another equally strong order appears.
+Refund credits cannot be matched as purchase charges. Bank sync commits before
+receipt reconciliation; a matching failure is reported separately and can be
+retried without losing the Plaid cursor or imported transactions.
+
+The receipt schema is added by the versioned additive migration in
+`backend/db/migrations` after existing core tables are created. No Plaid table
+or historical transaction row is reset to add receipts.
 
 ## Monthly Spending Limits
 

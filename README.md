@@ -8,7 +8,7 @@ and ask grounded finance questions over local data.
 The first phase is a local-first modular monolith:
 
 - `frontend`: React + TypeScript dashboard.
-- `backend`: FastAPI, Plaid ingestion, statement ingestion, analytics services, LangGraph agent, dbt CLI.
+- `backend`: FastAPI, Plaid and targeted Gmail receipt ingestion, statement ingestion, analytics services, LangGraph agent, dbt CLI.
 - `postgres`: durable local database backed by a Docker named volume.
 - `dbt`: raw -> staging -> core -> marts transformations over source-agnostic transactions.
 - `evals`: small live-agent eval suite for tool choice and grounded responses.
@@ -18,6 +18,23 @@ the tools calculate using code/SQL, and the agent synthesizes the answer. Chat
 requires a real LLM provider configuration and returns an error until one is set.
 
 ## Local Setup
+
+For a Windows host development environment, use an isolated Python environment
+so that the repository's SQLAlchemy 2.x requirement does not resolve to an older
+global installation:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+cd frontend
+npm.cmd ci
+cd ..
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-dev.ps1
+```
+
+The verification script runs the backend unit tests and frontend TypeScript
+check without connecting to Plaid, Gmail, or the local database. Pass
+`-WithDocker` to additionally check that Docker Compose is reachable.
 
 Create your environment file:
 
@@ -50,6 +67,8 @@ The v2 data model is Plaid-first and split into source-native and canonical laye
 - `core.financial_accounts`: canonical account metadata, Plaid-backed where available.
 - `core.transactions`: canonical transactions consumed by categorization, dbt, analytics, and the agent.
 - `planning.monthly_category_limits`: recurring monthly limits for parent spending categories.
+- `receipt.*`: Gmail connection/sync state, minimal message provenance,
+  normalized orders/items, and transaction-order match evidence.
 
 See `docs/data-architecture-v2.md` for the identity model, PDF reconciliation
 strategy, Plaid sync lifecycle, PFC mapping strategy, and planned LLM tool surface.
@@ -91,7 +110,8 @@ PUT    /budgets/monthly-limits/{parent_category_id}  {"amount": "500.00"}
 DELETE /budgets/monthly-limits/{parent_category_id}
 ```
 
-For a clean local rebuild after schema changes:
+Only for a disposable database, a full reset removes local transactions and
+receipt records. Use the startup migration for additive receipt changes:
 
 ```bash
 docker compose down -v
@@ -141,6 +161,91 @@ The [Trial plan](https://plaid.com/docs/account/billing/) permits 10 Production
 Items total; removing an Item does not restore a slot. Repeated API calls on an
 existing Item do not create another Item. Confirm your Plaid plan before using
 real bank data.
+
+## Gmail Receipt Development Setup
+
+Create a Google Cloud OAuth client for a **Web application** in testing mode,
+enable the Gmail API, and add only the intended development account as a test
+user. Register this exact authorized redirect URI:
+
+```text
+http://localhost:8000/gmail/callback
+```
+
+Add these values to the ignored local `.env` file:
+
+```text
+GMAIL_CLIENT_ID=your_google_client_id
+GMAIL_CLIENT_SECRET=your_google_client_secret
+GMAIL_REDIRECT_URI=http://localhost:8000/gmail/callback
+GMAIL_TOKEN_KEY=your_fernet_key
+```
+
+Generate the key locally with:
+
+```powershell
+.\.venv\Scripts\python.exe -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+The backend keeps the refresh token encrypted in PostgreSQL and never returns
+it to the browser. Gmail OAuth requests the read-only Gmail scope, which grants
+broader mailbox read access than receipts alone. The importer currently searches
+order emails from `noreply@uber.com` with “Uber Eats” in the subject from the
+last 90 days. It stores extracted order data and source metadata, but does not
+keep complete message bodies. The observed Uber Eats emails contain a total and
+date, but no item list; those fields remain unknown and matches require review.
+Receipt reconciliation runs after both Gmail and Plaid syncs, including when
+Gmail skips previously imported messages. Repeating either sync does not create
+duplicate links. Automatic confirmation requires a complete receipt, exact
+amount and currency, matching merchant, a date within one day, and no competing
+order or transaction. Other candidates remain possible matches for review.
+Disconnect can retain or delete the
+locally extracted records. If Google revocation cannot be confirmed, the UI
+reports that separately.
+
+Receipt tables are created by an additive, versioned migration on backend
+startup. Preserve the existing PostgreSQL volume and Plaid vault; a database
+reset is not required.
+
+### No-secrets demo
+
+```powershell
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Open http://localhost:3100. The demo has its own PostgreSQL volume and uses
+sanitized DoorDash and Uber Eats receipts with synthetic debits. It does not
+mount `.env`, `.local`, or use live Plaid/Gmail credentials. The seeded
+transactions can be opened from Transactions to inspect their linked orders
+and items. Demo itemization is synthetic; the connected account's Uber Eats
+emails currently expose only order totals in their message text.
+
+After the demo stack is ready, run
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-demo.ps1`
+to check the seeded transactions, itemized receipts, matches, and ledger total.
+To exercise Gmail import and repeat-sync recovery with synthetic API responses against
+the isolated demo database, run:
+
+```powershell
+$env:FG_DEMO_DATABASE_URL = 'postgresql+psycopg://finance_guardian_demo:finance_guardian_demo@127.0.0.1:5433/finance_guardian_demo'
+.\.venv\Scripts\python.exe -m pytest backend/tests/test_gmail_sync_db.py backend/tests/test_receipt_reconciliation_db.py -q
+Remove-Item Env:FG_DEMO_DATABASE_URL
+```
+
+Receipt workflow endpoints:
+
+```text
+GET    /gmail/status
+POST   /gmail/connect
+GET    /gmail/callback
+POST   /gmail/sync
+POST   /gmail/{connection_id}/disconnect
+GET    /transactions/{transaction_id}/context
+POST   /transactions/{transaction_id}/matches
+DELETE /transactions/{transaction_id}/matches/{match_id}
+GET    /receipts/orders
+PATCH  /receipts/items/{item_id}
+```
 
 ## Useful Commands
 

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from backend.core.config import settings
 from backend.db.base import Base
+from backend.db.migrations import run_migrations
 
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,12 @@ def init_database() -> None:
         connection.execute(text("create schema if not exists enrichment"))
         connection.execute(text("create schema if not exists planning"))
     Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
     with SessionLocal() as session:
         CategorizationService(session).seed_defaults()
+        if settings.demo_mode:
+            from backend.receipts.demo import seed_demo
+            seed_demo(session)
         AccountService(session).link_legacy_statements()
         if settings.plaid_vault_key.strip():
             restored = PlaidVault().restore(session)

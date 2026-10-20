@@ -26,6 +26,42 @@ type Transaction = {
   category_name: string;
   subcategory_id: string | null;
   categorization_source: string | null;
+  receipt_status: "matched" | "possible" | "no_receipt";
+};
+type OrderItem = {
+  id: string; description: string; quantity: string | null;
+  unit_price: string | null; line_total: string | null;
+  category_id: string | null; evidence: string | null;
+};
+type ReceiptMatch = {
+  match_id: string; status: "confirmed" | "suggested";
+  confidence: string; reasons: string[];
+  order: {
+    id: string; merchant: string; merchant_order_id: string | null;
+    placed_date: string | null; currency: string | null;
+    subtotal: string | null; delivery_fee: string | null;
+    tax: string | null; tip: string | null; other_fees: string | null;
+    discount: string | null; total: string | null;
+    parse_quality: string; items: OrderItem[];
+    source: { message_id: string; sender: string | null; subject: string | null;
+      received_at: string | null; parser_version: string } | null;
+  };
+};
+type TransactionContext = {
+  transaction: { id: string; merchant: string; amount: string; currency: string | null;
+    direction: string; posted_date: string; authorized_date: string | null;
+    is_pending: boolean; account_name: string };
+  receipt_status: Transaction["receipt_status"];
+  matches: ReceiptMatch[];
+};
+type GmailConnection = {
+  id: string; email_address: string; status: string; last_sync_at: string | null;
+  source_count: number; last_run: { status: string; imported: number;
+    skipped: number; failed: number; completed_at: string | null } | null;
+};
+type OrderSearchResult = {
+  id: string; merchant: string; placed_date: string | null;
+  total: string | null; currency: string | null;
 };
 type Category = {
   category_id: string; display_name: string;
@@ -239,6 +275,11 @@ export default function App() {
   const [limitAmount, setLimitAmount] = useState("");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [gmailConnections, setGmailConnections] = useState<GmailConnection[]>([]);
+  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
+  const [transactionContext, setTransactionContext] = useState<TransactionContext | null>(null);
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderResults, setOrderResults] = useState<OrderSearchResult[]>([]);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -247,6 +288,15 @@ export default function App() {
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  useEffect(() => {
+    const gmailResult = new URLSearchParams(window.location.search).get("gmail");
+    if (!gmailResult) return;
+    setNotice(gmailResult === "connected" ? "Gmail connected. Sync receipts to import purchase context."
+      : gmailResult === "cancelled" ? "Gmail authorization was canceled."
+      : "Gmail authorization could not be completed. Try connecting again.");
+    window.history.replaceState(null, "", window.location.pathname + window.location.hash);
   }, []);
 
   const navigate = (next: Page) => {
@@ -344,6 +394,99 @@ export default function App() {
     } finally { setBusy(false); }
   };
 
+  const refreshGmail = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/gmail/status`);
+      setGmailConnections(await readJson<GmailConnection[]>(response));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Gmail status is unavailable.");
+    }
+  }, []);
+
+  useEffect(() => { if (page === "accounts") void refreshGmail(); }, [page, refreshGmail]);
+  useEffect(() => {
+    if (page === "transactions" && transactionContext) {
+      document.querySelector(".receiptDetail")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [page, transactionContext]);
+
+  const openTransaction = (id: string) => void runAction(async () => {
+    setSelectedTransactionId(id);
+    setTransactionContext(null);
+    setOrderResults([]);
+    setOrderSearch("");
+    setTransactionContext(await readJson<TransactionContext>(
+      await fetch(`${API_BASE_URL}/transactions/${id}/context`),
+    ));
+  });
+
+  const refreshContext = async () => {
+    if (!selectedTransactionId) return;
+    setTransactionContext(await readJson<TransactionContext>(
+      await fetch(`${API_BASE_URL}/transactions/${selectedTransactionId}/context`),
+    ));
+    await refresh();
+  };
+
+  const connectGmail = () => void runAction(async () => {
+    const { authorization_url } = await readJson<{ authorization_url: string }>(
+      await fetch(`${API_BASE_URL}/gmail/connect`, { method: "POST" }),
+    );
+    window.location.assign(authorization_url);
+  });
+
+  const syncGmail = () => void runAction(async () => {
+    const result = await readJson<{ imported: number; skipped: number; failed: number; limited: boolean; reconciliation?: { status?: string; links_created?: number } }>(
+      await fetch(`${API_BASE_URL}/gmail/sync`, { method: "POST" }),
+    );
+    setNotice(`Receipts: ${result.imported} imported, ${result.skipped} already present, ${result.failed} failed.`
+      + (result.reconciliation?.status === "failed" ? " Receipt matching needs a retry." : ` ${result.reconciliation?.links_created ?? 0} new receipt links.`)
+      + (result.limited ? " Search limit reached; some messages were not checked." : ""));
+    await Promise.all([refreshGmail(), refresh()]);
+  });
+
+  const disconnectGmail = (id: string, deleteExtracted: boolean) => void runAction(async () => {
+    const result = await readJson<{ google_revoked: boolean }>(await fetch(`${API_BASE_URL}/gmail/${id}/disconnect`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ delete_extracted: deleteExtracted }),
+    }));
+    setNotice((deleteExtracted ? "Gmail disconnected and local receipt records deleted." : "Gmail disconnected; local receipt records retained.")
+      + (result.google_revoked ? "" : " Google revocation could not be confirmed; check your Google Account permissions."));
+    await Promise.all([refreshGmail(), refresh()]);
+  });
+
+  const acceptReceipt = (orderId: string) => void runAction(async () => {
+    if (!selectedTransactionId) return;
+    await readJson(await fetch(`${API_BASE_URL}/transactions/${selectedTransactionId}/matches`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_id: orderId }),
+    }));
+    await refreshContext();
+  });
+
+  const unlinkReceipt = (matchId: string) => void runAction(async () => {
+    if (!selectedTransactionId) return;
+    const response = await fetch(`${API_BASE_URL}/transactions/${selectedTransactionId}/matches/${matchId}`, { method: "DELETE" });
+    if (!response.ok) throw new Error("Could not unlink the receipt.");
+    await refreshContext();
+  });
+
+  const findOrders = (event: FormEvent) => {
+    event.preventDefault();
+    void runAction(async () => {
+      const params = new URLSearchParams({ query: orderSearch.trim() });
+      setOrderResults(await readJson<OrderSearchResult[]>(await fetch(`${API_BASE_URL}/receipts/orders?${params}`)));
+    });
+  };
+
+  const saveItem = (itemId: string, description: string, categoryId: string) => void runAction(async () => {
+    await readJson(await fetch(`${API_BASE_URL}/receipts/items/${itemId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description, category_id: categoryId }),
+    }));
+    await refreshContext();
+  });
+
   const saveLimit = (event: FormEvent) => {
     event.preventDefault();
     if (!limitCategory || !limitAmount) return;
@@ -394,10 +537,11 @@ export default function App() {
   };
 
   const syncBanks = () => void runAction(async () => {
-    const result = await readJson<{ items_synced: number; transactions_added: number }>(await fetch(`${API_BASE_URL}/plaid/sync-transactions`, {
+    const result = await readJson<{ items_synced: number; transactions_added: number; receipt_reconciliation?: { status?: string; links_created?: number } }>(await fetch(`${API_BASE_URL}/plaid/sync-transactions`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
     }));
-    setNotice(`${result.items_synced} connection synced · ${result.transactions_added} transactions added.`);
+    setNotice(`${result.items_synced} connection synced · ${result.transactions_added} transactions added.`
+      + (result.receipt_reconciliation?.status === "failed" ? " Receipt matching needs a retry." : ` ${result.receipt_reconciliation?.links_created ?? 0} new receipt links.`));
     await refresh();
   });
 
@@ -516,8 +660,16 @@ export default function App() {
         <div className="pageHeading"><div><div className="eyebrow">ACTIVITY</div><h1>Transactions</h1><p>Find activity and keep categories accurate.</p></div>{accountSelect}</div>
         <div className="transactionFilters"><label>From<input type="date" value={transactionStart} max={transactionEnd || undefined} onChange={(event) => setTransactionStart(event.target.value)} /></label><label>To<input type="date" value={transactionEnd} min={transactionStart || undefined} onChange={(event) => setTransactionEnd(event.target.value)} /></label><label>Category<select value={transactionCategory} onChange={(event) => setTransactionCategory(event.target.value)}><option value="">All categories</option>{categories.map((category) => <option key={category.category_id} value={category.category_id}>{category.display_name}</option>)}</select></label>{(transactionStart || transactionEnd || transactionCategory) && <button className="textButton" onClick={() => { setTransactionStart(""); setTransactionEnd(""); setTransactionCategory(""); }}>Clear activity filters</button>}</div>
         {transactionCategory && <p className="filterContext">Showing {selectedCategoryName} transactions. Category changes here update your reports.</p>}
-        <section className="surface"><form className="searchBar" onSubmit={(event) => { event.preventDefault(); setSearchQuery(searchInput.trim()); }}><Search size={18} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search merchant or description" aria-label="Search transactions" /><button className="primaryButton" type="submit">Search</button>{searchQuery && <button className="textButton" type="button" onClick={() => { setSearchInput(""); setSearchQuery(""); }}>Clear</button>}</form><div className="tableWrap"><table className="transactionTable"><thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Account</th><th className="amountCell">Amount</th></tr></thead><tbody>{transactions.map((transaction) => <tr key={transaction.id}><td>{transaction.posted_date}</td><td><strong>{transaction.canonical_merchant_name ?? transaction.description}</strong><small>{transaction.is_pending ? "Pending" : "Posted"}</small></td><td><select aria-label={`Category for ${transaction.description}`} value={transaction.subcategory_id ?? ""} onChange={(event) => updateCategory(transaction.id, event.target.value)} disabled={busy}><option value="">Uncategorized</option>{categories.map((category) => <optgroup key={category.category_id} label={category.display_name}>{category.subcategories.map((sub) => <option key={sub.category_id} value={sub.category_id}>{sub.display_name}</option>)}</optgroup>)}</select></td><td>{transaction.account_name}</td><td className={`amountCell ${transaction.direction === "credit" ? "positive" : ""}`}>{transaction.direction === "credit" ? "+" : "−"}{money(Number(transaction.amount))}</td></tr>)}</tbody></table>{transactions.length === 0 && <EmptyState title={searchQuery ? "No matching transactions" : "No transactions yet"} detail={searchQuery ? "Try a different search." : "Connect a bank or import a statement to get started."} />}</div></section>
+        <section className="surface"><form className="searchBar" onSubmit={(event) => { event.preventDefault(); setSearchQuery(searchInput.trim()); }}><Search size={18} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search merchant or description" aria-label="Search transactions" /><button className="primaryButton" type="submit">Search</button>{searchQuery && <button className="textButton" type="button" onClick={() => { setSearchInput(""); setSearchQuery(""); }}>Clear</button>}</form><div className="tableWrap"><table className="transactionTable"><thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Receipt</th><th>Account</th><th className="amountCell">Amount</th></tr></thead><tbody>{transactions.map((transaction) => <tr key={transaction.id}><td>{transaction.posted_date}</td><td><button className="transactionOpen" onClick={() => openTransaction(transaction.id)}>{transaction.canonical_merchant_name ?? transaction.description}</button><small>{transaction.is_pending ? "Pending" : "Posted"}</small></td><td><select aria-label={`Category for ${transaction.description}`} value={transaction.subcategory_id ?? ""} onChange={(event) => updateCategory(transaction.id, event.target.value)} disabled={busy}><option value="">Uncategorized</option>{categories.map((category) => <optgroup key={category.category_id} label={category.display_name}>{category.subcategories.map((sub) => <option key={sub.category_id} value={sub.category_id}>{sub.display_name}</option>)}</optgroup>)}</select></td><td><span className={`receiptBadge ${transaction.receipt_status}`}>{transaction.receipt_status === "matched" ? "Receipt matched" : transaction.receipt_status === "possible" ? "Possible match" : "No receipt"}</span></td><td>{transaction.account_name}</td><td className={`amountCell ${transaction.direction === "credit" ? "positive" : ""}`}>{transaction.direction === "credit" ? "+" : "−"}{money(Number(transaction.amount))}</td></tr>)}</tbody></table>{transactions.length === 0 && <EmptyState title={searchQuery ? "No matching transactions" : "No transactions yet"} detail={searchQuery ? "Try a different search." : "Connect a bank or import a statement to get started."} />}</div></section>
       </>}
+
+      {page === "transactions" && transactionContext && <TransactionDetail
+        context={transactionContext} orders={orderResults} orderSearch={orderSearch}
+        categories={categories}
+        setOrderSearch={setOrderSearch} onSearch={findOrders}
+        onClose={() => { setSelectedTransactionId(null); setTransactionContext(null); }}
+        onAccept={acceptReceipt} onUnlink={unlinkReceipt} onSaveItem={saveItem} busy={busy}
+      />}
 
       {page === "reports" && <>
         <div className="pageHeading"><div><div className="eyebrow">PATTERNS</div><h1>Reports</h1><p>Explore spending by account, category, and time. Transfers and card payments are excluded.</p></div>{accountSelect}</div>
@@ -532,6 +684,21 @@ export default function App() {
         <div className="pageHeading"><div><div className="eyebrow">DATA SOURCES</div><h1>Accounts & connections</h1><p>Manage connected institutions and keep transaction data fresh.</p></div></div>
         <div className="accountActions"><button className="primaryButton" onClick={() => connectBank()} disabled={busy}><Building2 size={17} />Connect bank</button><button className="secondaryButton" onClick={syncBanks} disabled={busy || plaidItems.length === 0}><RefreshCw size={17} />Sync transactions</button></div>
         <section className="surface"><div className="sectionTitle"><div><span className="eyebrow">CONNECTED</span><h2>Institutions</h2></div><span className="sectionHint">{plaidItems.length} connected</span></div>{plaidItems.length === 0 ? <EmptyState title="No bank connections" detail="Connect a bank to bring your accounts and transactions together." /> : <div className="institutionList">{plaidItems.map((item) => <div className="institution" key={item.item_id}><div className="institutionHead"><div className="institutionIcon"><Building2 size={21} /></div><div><strong>{item.institution_name ?? "Connected institution"}</strong><span>{item.accounts.length} accounts{!item.has_cursor ? " · sync needed" : ""}</span></div><span className="connectionStatus"><Check size={14} />{item.status}</span><button className="textButton" onClick={() => connectBank(item.item_id)} disabled={busy}>Reauthenticate</button></div>{item.accounts.map((account) => <div className="accountRow" key={account.account_id}><span>{account.name}{account.mask ? ` ····${account.mask}` : ""}</span><strong>{account.current_balance === null ? "Balance unavailable" : money(Number(account.current_balance))}</strong></div>)}</div>)}</div>}</section>
+        <section className="surface gmailPanel">
+          <div className="sectionTitle"><div><span className="eyebrow">PURCHASE CONTEXT</span><h2>Gmail receipts</h2></div><span className="sectionHint">{gmailConnections.some((connection) => connection.status === "active") ? "Connected" : "Not connected"}</span></div>
+          <p className="sectionDescription">Google's read-only Gmail permission can read messages and settings across your mailbox. Guardian currently searches recent Uber Eats order emails and stores extracted order details locally. Some emails include only a total, so missing items and fees stay unknown.</p>
+          {gmailConnections.some((connection) => connection.status === "demo")
+            ? <p className="sectionDescription">Synthetic demo receipts are loaded locally. No Gmail account is connected.</p>
+            : <div className="inlineActions"><button className="primaryButton" onClick={connectGmail} disabled={busy}>Connect Gmail</button><button className="secondaryButton" onClick={syncGmail} disabled={busy || !gmailConnections.some((connection) => connection.status === "active")}><RefreshCw size={16} />Sync receipts</button></div>}
+          {gmailConnections.map((connection) => <div className="gmailConnection" key={connection.id}>
+            <div><strong>{connection.email_address}</strong><span>{connection.status} · {connection.source_count} local messages · Last sync {connection.last_sync_at ? new Date(connection.last_sync_at).toLocaleString() : "Never"}</span>{connection.last_run && <small>Last import: {connection.last_run.imported} new, {connection.last_run.skipped} already present, {connection.last_run.failed} failed.</small>}</div>
+            {connection.status === "disconnected" && connection.source_count > 0
+              ? <button className="textButton dangerLink" onClick={() => disconnectGmail(connection.id, true)} disabled={busy}>Delete retained records</button>
+              : connection.status !== "demo" && connection.status !== "disconnected"
+                ? <div className="inlineActions"><button className="textButton" onClick={() => disconnectGmail(connection.id, false)} disabled={busy}>Disconnect, keep records</button><button className="textButton dangerLink" onClick={() => disconnectGmail(connection.id, true)} disabled={busy}>Disconnect, delete records</button></div>
+                : null}
+          </div>)}
+        </section>
         <section className="surface importPanel"><div><div className="eyebrow">SUPPLEMENTAL HISTORY</div><h2>Import a statement</h2><p>Upload a Chase PDF statement to add transactions that are not yet available through your bank connection.</p></div><label className="secondaryButton uploadButton"><FileUp size={17} />Choose PDF<input type="file" accept="application/pdf" onChange={uploadStatement} disabled={busy} /></label></section>
       </>}
 
@@ -548,4 +715,59 @@ export default function App() {
 function TransactionList({ rows }: { rows: Transaction[]; compact?: boolean }) {
   if (rows.length === 0) return <EmptyState title="No recent activity" detail="Your latest transactions will appear here." />;
   return <div className="recentList">{rows.map((row) => <div className="recentRow" key={row.id}><div className={`transactionGlyph ${row.direction === "credit" ? "creditGlyph" : ""}`}>{row.direction === "credit" ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}</div><div className="recentName"><strong>{row.canonical_merchant_name ?? row.description}</strong><span>{row.category_name} · {row.posted_date}{row.is_pending ? " · Pending" : ""}</span></div><strong className={row.direction === "credit" ? "positive" : ""}>{row.direction === "credit" ? "+" : "−"}{money(Number(row.amount))}</strong></div>)}</div>;
+}
+
+function EditableReceiptItem({ item, categories, onSave }: {
+  item: OrderItem; categories: Category[];
+  onSave: (id: string, description: string, categoryId: string) => void;
+}) {
+  const [description, setDescription] = useState(item.description);
+  const [categoryId, setCategoryId] = useState(item.category_id ?? "");
+  useEffect(() => { setDescription(item.description); setCategoryId(item.category_id ?? ""); }, [item.description, item.category_id]);
+  return <form className="receiptItem" onSubmit={(event) => { event.preventDefault(); onSave(item.id, description.trim(), categoryId.trim()); }}>
+    <div className="receiptItemMain">
+      <input aria-label="Item description" value={description} onChange={(event) => setDescription(event.target.value)} required />
+      <span>Qty {item.quantity ?? "Unknown"} · line total {item.line_total ?? "Unknown"}</span>
+    </div>
+    <div className="receiptItemMeta">
+      <label>Item category <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">Unknown</option>{categories.map((category) => <optgroup key={category.category_id} label={category.display_name}>{category.subcategories.map((sub) => <option key={sub.category_id} value={sub.category_id}>{sub.display_name}</option>)}</optgroup>)}</select></label>
+      <button type="submit" className="textButton">Save correction</button>
+    </div>
+    {item.evidence && <small>Source: {item.evidence}</small>}
+  </form>;
+}
+
+function TransactionDetail({ context, orders, orderSearch, setOrderSearch, categories, onSearch, onClose,
+  onAccept, onUnlink, onSaveItem, busy }: {
+  context: TransactionContext; orders: OrderSearchResult[]; categories: Category[];
+  orderSearch: string; setOrderSearch: (value: string) => void;
+  onSearch: (event: FormEvent) => void; onClose: () => void;
+  onAccept: (orderId: string) => void; onUnlink: (matchId: string) => void;
+  onSaveItem: (id: string, description: string, categoryId: string) => void;
+  busy: boolean;
+}) {
+  return <section className="surface receiptDetail" aria-label="Transaction details">
+    <div className="sectionTitle"><div><span className="eyebrow">TRANSACTION CONTEXT</span><h2>{context.transaction.merchant}</h2></div><button className="iconButton" onClick={onClose} aria-label="Close transaction details"><X size={16} /></button></div>
+    <div className="receiptFacts">
+      <span>Bank amount <strong>{context.transaction.currency ?? "Currency unknown"} {context.transaction.amount}</strong></span>
+      <span>Posted <strong>{context.transaction.posted_date}</strong></span>
+      <span>State <strong>{context.transaction.is_pending ? "Pending" : "Posted"}</strong></span>
+      <span>Account <strong>{context.transaction.account_name}</strong></span>
+    </div>
+    {context.matches.length === 0 && <EmptyState title="No receipt linked" detail="This transaction still counts in your spending. A receipt may be unavailable or not yet imported." />}
+    {context.matches.map((match) => <article className="receiptOrder" key={match.match_id}>
+      <div className="receiptOrderHead"><div><span className={`receiptBadge ${match.status}`}>{match.status === "confirmed" ? "Receipt matched" : "Possible match"}</span><h3>{match.order.merchant}{match.order.merchant_order_id ? ` · Order ${match.order.merchant_order_id}` : ""}</h3></div><strong>{match.order.currency ?? "Currency unknown"} {match.order.total ?? "Total unknown"}</strong></div>
+      <p className="sectionDescription">Match evidence: {match.reasons.join(", ")}. Confidence {Math.round(Number(match.confidence) * 100)}%.</p>
+      <div className="receiptFacts"><span>Order date <strong>{match.order.placed_date ?? "Unknown"}</strong></span><span>Extraction <strong>{match.order.parse_quality}</strong></span></div>
+      <h4>Items</h4>
+      {match.order.items.length ? match.order.items.map((item) => <EditableReceiptItem key={item.id} item={item} categories={categories} onSave={onSaveItem} />) : <p className="sectionDescription">Items unknown.</p>}
+      <div className="receiptCharges">{(["subtotal", "delivery_fee", "tax", "tip", "other_fees", "discount"] as const).map((key) =>
+        <span key={key}>{key.replace(/_/g, " ")} <strong>{match.order[key] ?? "Unknown"}</strong></span>,
+      )}</div>
+      {match.order.source && <p className="receiptSource">Source: {match.order.source.sender ?? "Unknown sender"} · {match.order.source.subject ?? "Unknown subject"} · received {match.order.source.received_at ?? "Unknown"} · message {match.order.source.message_id}</p>}
+      <div className="inlineActions">{match.status === "suggested" && <button className="primaryButton" onClick={() => onAccept(match.order.id)} disabled={busy}>Accept match</button>}<button className="secondaryButton" onClick={() => onUnlink(match.match_id)} disabled={busy}>Unlink</button></div>
+    </article>)}
+    <form className="receiptSearch" onSubmit={onSearch}><label>Find another imported order<input value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Merchant name" /></label><button className="secondaryButton" type="submit" disabled={busy}>Search orders</button></form>
+    {orders.length > 0 && <div className="receiptResults">{orders.map((order) => <div key={order.id}><span>{order.merchant} · {order.placed_date ?? "Date unknown"} · {order.currency ?? "Currency unknown"} {order.total ?? "Total unknown"}</span><button className="textButton" onClick={() => onAccept(order.id)} disabled={busy}>Link</button></div>)}</div>}
+  </section>;
 }

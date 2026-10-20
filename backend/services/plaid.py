@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from decimal import Decimal
 import json
+import logging
 from typing import Any
 from uuid import uuid4
 
@@ -23,6 +24,10 @@ from backend.db.models import (
 )
 from backend.services.categorization import CategorizationService
 from backend.services.plaid_vault import PlaidVault
+from backend.receipts.models import TransactionOrderMatch
+from backend.receipts.reconciliation import ReceiptReconciler
+
+logger = logging.getLogger(__name__)
 
 
 class PlaidService:
@@ -147,6 +152,13 @@ class PlaidService:
             except Exception as exc:
                 self.session.rollback()
                 raise PlaidIntegrationError("Plaid transaction sync failed.") from exc
+        try:
+            totals["receipt_reconciliation"] = ReceiptReconciler(self.session).reconcile_all()
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            logger.warning("Receipt reconciliation failed after a successful Plaid sync.")
+            totals["receipt_reconciliation"] = {"status": "failed"}
         return totals
 
     def list_items(self) -> list[dict]:
@@ -445,6 +457,32 @@ class PlaidService:
         pending_transaction.replaced_by_transaction_id = posted_transaction.id
         pending_transaction.removed_at = datetime.now(UTC)
         self._copy_active_category_if_needed(from_transaction=pending_transaction, to_transaction=posted_transaction)
+        self._copy_receipt_matches(from_transaction=pending_transaction, to_transaction=posted_transaction)
+
+    def _copy_receipt_matches(self, from_transaction: Transaction, to_transaction: Transaction) -> None:
+        """Keep receipt context on the posted canonical transaction."""
+        for source_match in self.session.scalars(select(TransactionOrderMatch).where(
+            TransactionOrderMatch.transaction_id == from_transaction.id,
+            TransactionOrderMatch.status.in_(("confirmed", "suggested")),
+        )).all():
+            target_match = self.session.scalar(select(TransactionOrderMatch).where(
+                TransactionOrderMatch.transaction_id == to_transaction.id,
+                TransactionOrderMatch.order_id == source_match.order_id,
+            ))
+            if target_match is None:
+                target_match = TransactionOrderMatch(
+                    transaction_id=to_transaction.id,
+                    order_id=source_match.order_id,
+                    status=source_match.status,
+                    confidence=source_match.confidence,
+                    reasons=[*source_match.reasons, "moved from pending transaction"],
+                    user_override=source_match.user_override,
+                )
+                self.session.add(target_match)
+            elif source_match.status == "confirmed":
+                target_match.status = "confirmed"
+                target_match.user_override = target_match.user_override or source_match.user_override
+            source_match.status = "superseded"
 
     def _copy_active_category_if_needed(self, from_transaction: Transaction, to_transaction: Transaction) -> None:
         existing_target_category = self.session.scalar(
