@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import {
   ArrowDownLeft, ArrowRight, ArrowUpRight, Bot, Building2, ChartNoAxesCombined,
@@ -7,9 +7,12 @@ import {
 } from "lucide-react";
 import { CategoryShare, CategoryTrend } from "./ReportCharts";
 import type { ReportMonth, SpendingReport } from "./ReportCharts";
+import { CategoryFillTile } from "./CategoryFillTile";
+import { GoalsPage } from "./GoalsPage";
+import type { GoalEvaluation } from "./goalTypes";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-const pages = ["overview", "transactions", "reports", "accounts", "settings"] as const;
+const pages = ["overview", "transactions", "reports", "goals", "accounts", "settings"] as const;
 type Page = typeof pages[number];
 
 type Transaction = {
@@ -125,6 +128,11 @@ const monthRange = (key: string) => {
   const [year, month] = key.split("-").map(Number);
   const lastDay = new Date(year, month, 0).getDate();
   return { start: `${key}-01`, end: `${key}-${String(lastDay).padStart(2, "0")}` };
+};
+const previousMonth = (key: string) => {
+  const [year, month] = key.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 2, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 const todayKey = () => {
   const today = new Date();
@@ -262,6 +270,8 @@ export default function App() {
   const [overviewReport, setOverviewReport] = useState<SpendingReport | null>(null);
   const [rangeReport, setRangeReport] = useState<SpendingReport | null>(null);
   const [limits, setLimits] = useState<MonthlyLimit[]>([]);
+  const [goalEvaluations, setGoalEvaluations] = useState<GoalEvaluation[]>([]);
+  const [priorGoalEvaluations, setPriorGoalEvaluations] = useState<GoalEvaluation[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [plaidItems, setPlaidItems] = useState<PlaidItem[]>([]);
   const [jobs, setJobs] = useState<CategorizationJob[]>([]);
@@ -333,23 +343,28 @@ export default function App() {
       `/analytics/spending-report?${reportQuery}`,
       "/budgets/monthly-limits", "/categorization/categories", "/plaid/items",
       "/categorization/jobs?limit=100", "/categorization/summary", `/transactions?${recentQuery}`,
-      "/accounts",
+      "/accounts", `/goals/evaluations?month=${month}`,
+      `/goals/evaluations?month=${previousMonth(month)}`,
     ];
     try {
       const responses = await Promise.all(urls.map((url) => fetch(`${API_BASE_URL}${url}`)));
-      const [nextTransactions, nextOverview, nextRange, nextLimits, nextCategories, nextItems, nextJobs, nextCategorizationSummary, nextRecent, nextAccounts] = await Promise.all([
+      const [nextTransactions, nextOverview, nextRange, nextLimits, nextCategories, nextItems, nextJobs, nextCategorizationSummary, nextRecent, nextAccounts, nextGoals, nextPriorGoals] = await Promise.all([
         readJson<Transaction[]>(responses[0]), readJson<SpendingReport>(responses[1]),
         readJson<SpendingReport>(responses[2]), readJson<MonthlyLimit[]>(responses[3]),
         readJson<Category[]>(responses[4]), readJson<PlaidItem[]>(responses[5]),
         readJson<CategorizationJob[]>(responses[6]), readJson<CategorizationSummary>(responses[7]),
         readJson<Transaction[]>(responses[8]),
         readJson<CanonicalAccount[]>(responses[9]),
+        readJson<GoalEvaluation[]>(responses[10]),
+        readJson<GoalEvaluation[]>(responses[11]),
       ]);
       setTransactions(nextTransactions);
       setRecentTransactions(nextRecent);
       setOverviewReport(nextOverview);
       setRangeReport(nextRange);
       setLimits(nextLimits);
+      setGoalEvaluations(nextGoals);
+      setPriorGoalEvaluations(nextPriorGoals);
       setCategories(nextCategories);
       setAccounts(nextAccounts);
       setPlaidItems(nextItems);
@@ -374,7 +389,6 @@ export default function App() {
       posted: Number(row.posted_amount), pending: Number(row.pending_amount),
     }));
   }, [overviewReport]);
-  const topCategories = categoryTotals.slice(0, 5);
   const rangeCategories = (rangeReport?.categories ?? []).map((row) => ({
     id: row.parent_category_id, name: row.parent_category,
     posted: Number(row.posted_amount), pending: Number(row.pending_amount),
@@ -385,7 +399,18 @@ export default function App() {
   const movementIn = Number(overviewReport?.summary.posted_movements_in ?? 0)
     + Number(overviewReport?.summary.pending_movements_in ?? 0);
   const selectedCategoryName = categories.find((category) => category.category_id === transactionCategory)?.display_name ?? transactionCategory;
-  const expenseCategories = categories.filter((category) => category.category_id !== "income" && category.category_id !== "other");
+  const expenseCategories = categories.filter((category) => !["income", "financial"].includes(category.category_id));
+  const categoryById = new Map(categoryTotals.map((row) => [row.id, row]));
+  const parentGoalById = new Map(goalEvaluations.filter((entry) =>
+    entry.goal.scope_kind === "category" && entry.goal.status === "active",
+  ).map((entry) => [entry.goal.category_id, entry]));
+  const whereRows = expenseCategories.map((category) => ({
+    id: category.category_id, name: category.display_name,
+    posted: categoryById.get(category.category_id)?.posted ?? 0,
+    pending: categoryById.get(category.category_id)?.pending ?? 0,
+    goal: parentGoalById.get(category.category_id),
+  }));
+  const relativeScale = Math.max(1, ...whereRows.map((row) => row.posted + row.pending));
 
   const runAction = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -622,6 +647,7 @@ export default function App() {
         <button className={page === "overview" ? "navItem active" : "navItem"} onClick={() => navigate("overview")} aria-current={page === "overview" ? "page" : undefined}><LayoutDashboard size={18} />Overview</button>
         <button className={page === "transactions" ? "navItem active" : "navItem"} onClick={() => navigate("transactions")} aria-current={page === "transactions" ? "page" : undefined}><List size={18} />Transactions</button>
         <button className={page === "reports" ? "navItem active" : "navItem"} onClick={() => navigate("reports")} aria-current={page === "reports" ? "page" : undefined}><ChartNoAxesCombined size={18} />Reports</button>
+        <button className={page === "goals" ? "navItem active" : "navItem"} onClick={() => navigate("goals")} aria-current={page === "goals" ? "page" : undefined}><WalletCards size={18} />Goals</button>
       </nav>
       <div className="navLabel utilityLabel">MANAGE</div>
       <nav aria-label="Management navigation">
@@ -651,10 +677,26 @@ export default function App() {
         {(movementOut > 0 || movementIn > 0) && <p className="movementNote">{money(movementOut)} moved out and {money(movementIn)} moved in through transfers or card payments. These are shown in Transactions and excluded from spending and net flow.</p>}
         <div className="dashboardGrid">
           <section className="surface trendPanel"><div className="sectionTitle"><div><span className="eyebrow">THE BIG PICTURE</span><h2>Money in vs. spending</h2></div><span className="sectionHint">Report date range</span></div><TrendChart rows={rangeReport?.months ?? []} /></section>
-          <section className="surface categoryPanel"><div className="sectionTitle"><div><span className="eyebrow">WHERE IT WENT</span><h2>Top 5 categories</h2></div><button className="textButton" onClick={() => navigate("reports")}>All categories <ArrowRight size={15} /></button></div><p className="sectionDescription">Projected spending includes posted and pending transactions.</p><CategoryBars rows={topCategories} limits={limits} showLimits={month === currentMonth()} accountScoped={Boolean(accountId)} onSelect={(id) => { const range = monthRange(month); openCategory(id, range.start, range.end); }} /><button className="textButton manageLink" onClick={() => navigate("settings")}>Manage monthly limits <ArrowRight size={15} /></button></section>
         </div>
+        <section className="surface categoryPanel"><div className="sectionTitle"><div><span className="eyebrow">WHERE IT WENT</span><h2>Every spending category</h2></div><button className="textButton" onClick={() => navigate("goals")}>Manage goals <ArrowRight size={15} /></button></div>
+          <p className="sectionDescription">The fill rises from the bottom. Goal tiles use projected net spend, including pending activity; tiles without a goal show relative category spending.{accountId ? " Goals always use all accounts." : ""} Scroll to see all categories.</p>
+          <div className="whereTiles" aria-label="Monthly spending by category">{whereRows.map((row) => {
+            const goal = row.goal;
+            const range = monthRange(month);
+            return <CategoryFillTile key={row.id} name={row.name}
+              posted={goal ? Number(goal.posted_spend) : row.posted}
+              pending={goal ? Number(goal.pending_net) : row.pending}
+              limit={goal ? Number(goal.threshold_amount) : undefined}
+              currency={goal?.currency ?? "USD"} relativeScale={relativeScale}
+              onClick={() => openCategory(row.id, range.start, range.end)} />;
+          })}</div>
+        </section>
         <section className="surface recentPanel"><div className="sectionTitle"><div><span className="eyebrow">LATEST ACTIVITY</span><h2>Recent transactions</h2></div><button className="textButton" onClick={() => navigate("transactions")}>View all <ArrowRight size={15} /></button></div><TransactionList rows={recentTransactions} compact /></section>
       </>}
+
+      {page === "goals" && <GoalsPage evaluations={goalEvaluations} priorEvaluations={priorGoalEvaluations} categories={categories} month={month}
+        onMonthChange={setMonth} onRefresh={refresh}
+        onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />}
 
       {page === "transactions" && <>
         <div className="pageHeading"><div><div className="eyebrow">ACTIVITY</div><h1>Transactions</h1><p>Find activity and keep categories accurate.</p></div>{accountSelect}</div>
@@ -703,8 +745,8 @@ export default function App() {
       </>}
 
       {page === "settings" && <>
-        <div className="pageHeading"><div><div className="eyebrow">PREFERENCES</div><h1>Settings</h1><p>Set spending limits and keep your transaction categories organized.</p></div></div>
-        <section className="surface"><div className="sectionTitle"><div><span className="eyebrow">MONTHLY PLANNING</span><h2>Category limits</h2></div></div><p className="sectionDescription">Limits repeat each month and apply to parent spending categories. The current month chart compares them with posted and pending spending.</p><form className="limitForm" onSubmit={saveLimit}><label>Category<select value={limitCategory} onChange={(event) => { const id = event.target.value; setLimitCategory(id); setLimitAmount(limits.find((limit) => limit.category_id === id)?.amount ?? ""); }} required><option value="">Choose a category</option>{expenseCategories.map((category) => <option key={category.category_id} value={category.category_id}>{category.display_name}</option>)}</select></label><label>Monthly limit<input type="number" min="0.01" step="0.01" placeholder="0.00" value={limitAmount} onChange={(event) => setLimitAmount(event.target.value)} required /></label><button className="primaryButton" type="submit" disabled={busy}>Save limit</button></form>{limits.length > 0 && <div className="limitList">{limits.map((limit) => <div className="limitRow" key={limit.category_id}><span>{categories.find((category) => category.category_id === limit.category_id)?.display_name ?? limit.category_id}</span><strong>{money(Number(limit.amount))} / month</strong><button className="iconButton subtleButton" onClick={() => removeLimit(limit.category_id)} aria-label={`Remove limit for ${limit.category_id}`} disabled={busy}><Trash2 size={16} /></button></div>)}</div>}</section>
+        <div className="pageHeading"><div><div className="eyebrow">PREFERENCES</div><h1>Settings</h1><p>Manage monthly goals, quick limits, and transaction categories.</p></div></div>
+        <section className="surface"><div className="sectionTitle"><div><span className="eyebrow">MONTHLY PLANNING</span><h2>Category limits</h2></div></div><p className="sectionDescription">Quick limits are monthly goals. Choose a category or subcategory; the Goals page shows posted progress, pending exposure, and transaction evidence.</p><form className="limitForm" onSubmit={saveLimit}><label>Category<select value={limitCategory} onChange={(event) => { const id = event.target.value; setLimitCategory(id); setLimitAmount(limits.find((limit) => limit.category_id === id)?.amount ?? ""); }} required><option value="">Choose a category</option>{expenseCategories.map((category) => <Fragment key={category.category_id}><option value={category.category_id}>{category.display_name} ? all subcategories</option><optgroup label={category.display_name}>{category.subcategories.map((child) => <option key={child.category_id} value={child.category_id}>{child.display_name}</option>)}</optgroup></Fragment>)}</select></label><label>Monthly limit<input type="number" min="0.01" step="0.01" placeholder="0.00" value={limitAmount} onChange={(event) => setLimitAmount(event.target.value)} required /></label><button className="primaryButton" type="submit" disabled={busy}>Save limit</button></form>{limits.length > 0 && <div className="limitList">{limits.map((limit) => <div className="limitRow" key={limit.category_id}><span>{categories.find((category) => category.category_id === limit.category_id)?.display_name ?? categories.flatMap((category) => category.subcategories).find((child) => child.category_id === limit.category_id)?.display_name ?? limit.category_id}</span><strong>{money(Number(limit.amount))} / month</strong><button className="iconButton subtleButton" onClick={() => removeLimit(limit.category_id)} aria-label={`Remove limit for ${limit.category_id}`} disabled={busy}><Trash2 size={16} /></button></div>)}</div>}</section>
         <section className="surface"><div className="sectionTitle"><div><span className="eyebrow">DATA QUALITY</span><h2>Categorization</h2></div></div><p className="sectionDescription">{categorizationSummary ? `${categorizationSummary.categorized_transactions} of ${categorizationSummary.total_transactions} transactions categorized · ${categorizationSummary.uncategorized_transactions} uncategorized` : "Categorization status unavailable."}</p><div className="inlineActions"><button className="secondaryButton" onClick={() => runCategorization("apply-known")} disabled={busy}><Tags size={16} />Apply known aliases</button><button className="secondaryButton" onClick={() => runCategorization("categorize-unknowns")} disabled={busy}><Sparkles size={16} />Categorize unknowns</button></div>{jobs.some((job) => job.status === "pending") && <div className="jobList"><strong>Pending merchants</strong>{jobs.filter((job) => job.status === "pending").slice(0, 8).map((job) => <div key={job.id}><span>{job.normalized_merchant}</span><small>{job.transaction_count} transactions</small></div>)}</div>}</section>
         <section className="surface guardianPanel"><div className="sectionTitle"><div><span className="eyebrow">EXPERIMENTAL</span><h2>Ask Guardian</h2></div><Bot size={20} /></div><p className="sectionDescription">Ask a question about your imported transactions. Requires a configured LLM provider.</p><form className="searchBar" onSubmit={askGuardian}><input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="What were my biggest transactions?" aria-label="Question for Guardian" /><button className="primaryButton" type="submit" disabled={busy}>Ask</button></form>{answer && <p className="guardianAnswer">{answer}</p>}</section>
       </>}

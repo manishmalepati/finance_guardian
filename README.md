@@ -66,7 +66,8 @@ The v2 data model is Plaid-first and split into source-native and canonical laye
 - `raw.statement_transactions`: parsed statement rows with deterministic row hashes.
 - `core.financial_accounts`: canonical account metadata, Plaid-backed where available.
 - `core.transactions`: canonical transactions consumed by categorization, dbt, analytics, and the agent.
-- `planning.monthly_category_limits`: recurring monthly limits for parent spending categories.
+- `planning.goals`: recurring monthly category and subcategory spending targets.
+- `planning.monthly_category_limits`: legacy limits retained for additive migration; goal records are now the writable source of truth.
 - `receipt.*`: Gmail connection/sync state, minimal message provenance,
   normalized orders/items, and transaction-order match evidence.
 
@@ -75,8 +76,8 @@ strategy, Plaid sync lifecycle, PFC mapping strategy, and planned LLM tool surfa
 
 ## Dashboard
 
-The dark dashboard is organized into Overview, Transactions, Reports, Accounts,
-and Settings. Overview shows posted spending, money in, and net flow as the main
+The dark dashboard is organized into Overview, Transactions, Reports, Goals,
+Accounts, and Settings. Overview shows posted spending, money in, and net flow as the main
 figures. Pending amounts appear separately and are included in projected totals.
 Known transfers and credit card payments appear as money movements, separate
 from spending, money in, and net flow. Money in includes refunds; unclassified
@@ -88,11 +89,18 @@ category share. Selecting a category opens its transactions with the same date
 range and account filter. Transactions also supports account, date, category,
 and search filters. Reports use posted amounts for trend and share charts.
 
-Top spending categories compare posted and pending spending with recurring
-monthly limits. Set or remove a parent-category limit in Settings. Limits apply
-to the current month chart across all accounts; when one account is selected,
-its spending is compared with that global limit. Historical months show spending
-without a limit marker because past limit versions are not stored.
+Overview shows every spending category in a horizontally scrolling row of
+bottom-filled tiles. An active category goal fills against its monthly cap;
+projected overages get a red border and alert. Categories without goals use a
+relative spending scale. The Goals page creates, edits, pauses, and removes
+monthly category or subcategory targets, with posted progress, pending exposure,
+transaction evidence, and a prior-month comparison. Goals always cover all
+accounts. The Settings quick-limit editor writes the same goal records.
+
+Goal definitions are recurring. The prior-month comparison applies the current
+rule and threshold to prior transactions; this release does not preserve
+historical versions of edited thresholds or categories. See
+`docs/goals-design.md` for the calculation and extension design.
 
 Analytics endpoints:
 
@@ -106,15 +114,21 @@ Budget endpoints:
 
 ```text
 GET    /budgets/monthly-limits
-PUT    /budgets/monthly-limits/{parent_category_id}  {"amount": "500.00"}
-DELETE /budgets/monthly-limits/{parent_category_id}
+PUT    /budgets/monthly-limits/{category_or_subcategory_id}  {"amount": "500.00"}
+DELETE /budgets/monthly-limits/{category_or_subcategory_id}
+
+GET    /goals
+POST   /goals  {"category_id": "CATEGORY_ID", "threshold_amount": "500.00", "timezone": "America/Los_Angeles"}
+PATCH  /goals/{goal_id}  {"threshold_amount": "450.00", "status": "active"}
+DELETE /goals/{goal_id}
+GET    /goals/evaluations?month=YYYY-MM
+GET    /goals/{goal_id}/evaluation?month=YYYY-MM
 ```
 
-Only for a disposable database, a full reset removes local transactions and
-receipt records. Use the startup migration for additive receipt changes:
+Startup applies additive receipt and goal migrations to an existing database.
+Keep the PostgreSQL volume when updating:
 
 ```bash
-docker compose down -v
 docker compose up --build
 ```
 
@@ -222,7 +236,8 @@ emails currently expose only order totals in their message text.
 
 After the demo stack is ready, run
 `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-demo.ps1`
-to check the seeded transactions, itemized receipts, matches, and ledger total.
+to check the seeded transactions, itemized receipts, matches, ledger total,
+and parent/subcategory goal evaluations.
 To exercise Gmail import and repeat-sync recovery with synthetic API responses against
 the isolated demo database, run:
 

@@ -74,7 +74,7 @@ h1, h2, p { margin: 0; }
 .summaryFoot span:last-child { color: #718da9; }
 .movementNote { margin: 13px 2px 0; color: #a5bad0; font-size: 11px; line-height: 1.5; }
 
-.dashboardGrid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(340px, 1fr); gap: 16px; margin-top: 17px; align-items: start; }
+.dashboardGrid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 17px; align-items: start; }
 .surface { min-width: 0; padding: 22px 23px; background: #102642; border: 1px solid #244362; border-radius: 14px; box-shadow: 0 12px 30px #020d1e1a; }
 .sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
 .sectionTitle h2, .importPanel h2 { margin-top: 6px; font-size: 17px; font-weight: 720; letter-spacing: -.03em; }
@@ -99,8 +99,29 @@ h1, h2, p { margin: 0; }
 .chartPointOut { fill: #f58394; stroke: #102642; stroke-width: 2; }
 .chartPointIn { fill: #65d6c8; stroke: #102642; stroke-width: 2; }
 
-.categoryPanel { min-height: 337px; }
+.categoryPanel { margin-top: 17px; }
 .categoryPanel .sectionDescription { margin-bottom: 18px; }
+.whereTiles { display: grid; grid-auto-flow: column; grid-auto-columns: 176px; gap: 15px; overflow-x: auto; padding: 3px 2px 16px; scroll-snap-type: x proximity; scrollbar-color: #365f77 #102642; }
+.fillTile { display: block; width: 100%; padding: 0; color: #eaf2ff; background: none; border: 0; text-align: left; scroll-snap-align: start; }
+button.fillTile:hover .fillVessel { border-color: #8bd8dd; transform: translateY(-3px); }
+.fillVessel { position: relative; display: grid; place-items: center; isolation: isolate; width: 100%; height: 164px; overflow: hidden; background: linear-gradient(150deg, #1c3855, #12283f 72%); border: 2px solid #3b637c; border-radius: 23px 23px 13px 13px; box-shadow: inset 0 0 0 5px #0b233a85, 0 12px 24px #03102040; transition: border-color .2s, transform .2s; }
+.fillVessel::after { position: absolute; inset: 7px; z-index: 3; border: 1px solid #ffffff1b; border-radius: 16px 16px 8px 8px; content: ""; pointer-events: none; }
+.fillLiquid { position: absolute; inset: auto 0 0; height: var(--fill-percent); background: linear-gradient(180deg, #86e5df, #3d91b6); box-shadow: 0 -9px 23px #74d9de44; transition: height .6s ease; }
+.fillVessel.over { border-color: #ff8899; box-shadow: inset 0 0 0 5px #5b172150, 0 0 0 2px #ff6b8059, 0 0 25px #d4405e48; animation: goalPulse 2.8s ease-in-out infinite; }
+.fillVessel.over .fillLiquid { background: linear-gradient(180deg, #ff9c9c, #c84363); box-shadow: 0 -10px 25px #ff687b55; }
+.fillVessel.paused { opacity: .7; }
+.fillName { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; padding: 15px; color: #eff9ff; font-size: 17px; font-weight: 810; line-height: 1.12; letter-spacing: -.05em; text-align: center; text-wrap: balance; overflow-wrap: anywhere; }
+.fillNameInside { z-index: 4; color: #083449; clip-path: inset(calc(100% - var(--fill-percent)) 0 0 0); }
+.fillVessel.over .fillNameInside { color: #3e1028; }
+.fillAlert { position: absolute; top: 11px; right: 11px; z-index: 5; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #fff; background: #b52749; font-weight: 900; font-size: 13px; box-shadow: 0 0 0 3px #ffe6e650; }
+.fillTileCaption { display: grid; gap: 4px; padding: 10px 3px 0; }
+.fillTileCaption strong { color: #ebf7ff; font-size: 12px; letter-spacing: -.02em; white-space: nowrap; }
+.fillTileCaption span { color: #8eabc5; font-size: 11px; line-height: 1.35; }
+.fillTileCaption .fillOverText { color: #ffabb7; font-weight: 750; }
+.fillTile.large { max-width: 195px; }
+.fillTile.large .fillVessel { height: 185px; }
+@keyframes goalPulse { 50% { box-shadow: inset 0 0 0 5px #5b172150, 0 0 0 4px #ff6b8080, 0 0 31px #d4405e83; } }
+@media (prefers-reduced-motion: reduce) { .fillVessel.over { animation: none; } .fillLiquid, .fillVessel { transition: none; } }
 .categoryBars { display: grid; gap: 19px; }
 .categoryBarTop, .categoryBarFoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .categoryBarTop { margin-bottom: 8px; font-size: 12px; }
@@ -225,6 +246,39 @@ button.stackedSegment:hover { filter: brightness(1.22); }
 .limitRow { display: flex; align-items: center; gap: 12px; min-height: 47px; border-bottom: 1px solid #294762; font-size: 12px; }
 .limitRow span { flex: 1; }
 .limitRow strong { color: #9fe4da; }
+.goalEditor { margin-bottom: 17px; }
+.goalForm { display: grid; grid-template-columns: minmax(200px, 1.7fr) minmax(125px, .7fr) minmax(160px, 1fr) 95px minmax(170px, 1fr); gap: 12px; align-items: end; }
+.goalForm label { display: grid; gap: 7px; color: #a7bfd3; font-size: 11px; font-weight: 650; }
+.goalForm input, .goalForm select { width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; color: #eaf2ff; background: #0d2139; border: 1px solid #36516d; border-radius: 8px; color-scheme: dark; font-size: 12px; }
+.goalFormActions { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; }
+.goalMessage { margin-top: 13px; color: #9de2d9; font-size: 12px; }
+.goalGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 395px), 1fr)); gap: 17px; }
+.goalCardHead { display: flex; align-items: start; justify-content: space-between; gap: 14px; }
+.goalCardHead h2 { margin: 6px 0 4px; font-size: 17px; line-height: 1.2; }
+.goalCardHead p { color: #8fa9c2; font-size: 11px; }
+.goalStatus { padding: 5px 8px; border-radius: 999px; font-size: 10px; font-weight: 780; text-transform: capitalize; }
+.goalStatus.active { color: #a3f1dc; background: #20524e; }
+.goalStatus.paused { color: #d0c8b7; background: #43404b; }
+.goalCardBody { display: flex; align-items: center; gap: 22px; margin-top: 22px; }
+.goalCardBody .fillTile { flex: 0 0 162px; }
+.goalCardBody .fillVessel { height: 168px; }
+.goalNumbers { display: grid; flex: 1; min-width: 0; gap: 13px; }
+.goalNumbers > div { display: grid; gap: 3px; }
+.goalNumbers span { color: #88a5bf; font-size: 10px; }
+.goalNumbers strong { color: #e7f6ff; font-size: 12px; overflow-wrap: anywhere; }
+.goalActions { display: flex; gap: 15px; margin-top: 18px; padding-top: 14px; border-top: 1px solid #294762; }
+.goalEvidence { margin-top: 16px; border-top: 1px solid #294762; padding-top: 14px; }
+.goalEvidence summary { cursor: pointer; color: #8edbd7; font-size: 12px; font-weight: 700; }
+.goalEvidence p, .goalEvidence > span { display: block; margin: 9px 0; color: #8fa9c1; font-size: 11px; line-height: 1.45; }
+.goalEvidenceRow { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; padding: 10px 0; color: #e5f1fc; background: none; border: 0; border-bottom: 1px solid #27415a; text-align: left; }
+.goalEvidenceRow:hover { color: #8ee7df; }
+.goalEvidenceRow span { display: grid; gap: 3px; min-width: 0; }
+.goalEvidenceRow span strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.goalEvidenceRow small { color: #8ea6bf; font-size: 10px; }
+.goalEvidenceRow > strong { flex: 0 0 auto; font-size: 11px; }
+.goalEmpty { min-height: 130px; }
+.goalEmpty strong { font-size: 14px; }
+.goalEmpty p { margin-top: 8px; color: #90aac2; font-size: 12px; }
 .subtleButton { width: 28px; height: 28px; color: #9db5cb; background: transparent; border: 0; }
 .settings .surface { margin-bottom: 17px; }
 .mainContent > .surface + .surface { margin-top: 17px; }
@@ -275,6 +329,7 @@ button.stackedSegment:hover { filter: brightness(1.22); }
   .dashboardGrid { grid-template-columns: 1fr; }
   .categoryPanel { min-height: 0; }
   .reportVisualGrid { grid-template-columns: 1fr; }
+  .goalForm { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 780px) {
   .sidebar { position: fixed; left: 0; transform: translateX(-100%); transition: transform .2s ease; width: 244px; }
@@ -293,6 +348,7 @@ button.stackedSegment:hover { filter: brightness(1.22); }
   .welcomeBanner, .importPanel { align-items: flex-start; flex-direction: column; }
   .receiptOrderHead, .receiptSearch, .receiptItemMain, .receiptItemMeta, .gmailConnection { align-items: stretch; flex-direction: column; }
   .receiptCharges { grid-template-columns: 1fr; }
+  .goalForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 480px) {
   .mainContent { padding-inline: 14px; }
@@ -303,5 +359,8 @@ button.stackedSegment:hover { filter: brightness(1.22); }
   .topbar .eyebrow { font-size: 9px; }
   .accountPicker select { max-width: 180px; }
   .shareLayout { flex-direction: column; align-items: stretch; }
+  .goalForm { grid-template-columns: 1fr; }
+  .goalCardBody { align-items: stretch; flex-direction: column; }
+  .goalCardBody .fillTile { flex-basis: auto; width: 170px; }
   .donutWrap { width: 210px; max-width: 100%; margin: 0 auto; }
 }

@@ -34,4 +34,18 @@ if (-not ($connections | Where-Object { $_.status -eq 'demo' -and $_.source_coun
     throw 'Synthetic receipt source is missing.'
 }
 
-Write-Output 'Demo smoke checks passed: two synthetic receipts, matches, items, sources, and ledger total.'
+$goals = Invoke-RestMethod "$baseUrl/goals/evaluations?month=2026-10"
+$parentGoal = $goals | Where-Object { $_.goal.category_id -eq 'food_dining' } | Select-Object -First 1
+$childGoal = $goals | Where-Object { $_.goal.category_id -eq 'food_prepared' } | Select-Object -First 1
+if (-not $parentGoal -or -not $childGoal) { throw 'Synthetic parent and subcategory goals are missing.' }
+if ([decimal]$parentGoal.posted_spend -ne 46.50 -or [decimal]$childGoal.posted_spend -ne 46.50) {
+    throw 'Goal progress did not follow the canonical transactions.'
+}
+if ([decimal]$parentGoal.over_amount -ne 11.50 -or [decimal]$childGoal.over_amount -ne 0) {
+    throw 'Goal threshold and overage calculations are incorrect.'
+}
+if ($parentGoal.evidence.Count -ne 2 -or $childGoal.evidence.Count -ne 2) {
+    throw 'Goal evidence did not identify both synthetic charges.'
+}
+
+Write-Output 'Demo smoke checks passed: receipts, matches, itemization, ledger total, and monthly category/subcategory goals.'

@@ -7,7 +7,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db.models import FinancialAccount, IngestionRun, Transaction
+from backend.db.models import FinancialAccount, Goal, IngestionRun, Transaction
 from backend.core.config import settings
 from backend.receipts.gmail_sync import GmailSync
 from backend.receipts.models import EmailSource, GmailConnection
@@ -97,6 +97,24 @@ def _seed_uber_demo(session: Session) -> None:
     session.commit()
 
 
+def _seed_demo_goals(session: Session) -> None:
+    for category_id, name, amount in (
+        ("food_dining", "Food monthly spending", Decimal("35.00")),
+        ("food_prepared", "Prepared food monthly spending", Decimal("60.00")),
+    ):
+        if session.scalar(select(Goal.id).where(
+            Goal.metric_type == "monthly_spend", Goal.category_id == category_id,
+        )):
+            continue
+        session.add(Goal(
+            name=name, metric_type="monthly_spend", period_type="calendar_month",
+            scope_kind="category" if category_id == "food_dining" else "subcategory",
+            category_id=category_id, threshold_amount=amount,
+            currency="USD", timezone="UTC", status="active", rule_version=1,
+        ))
+    session.commit()
+
+
 def seed_demo(session: Session) -> None:
     """Called only when DEMO_MODE is set on the isolated demo stack."""
     if not settings.database_url.rsplit("/", 1)[-1].startswith("finance_guardian_demo"):
@@ -107,6 +125,7 @@ def seed_demo(session: Session) -> None:
     ))
     if existing is not None:
         _seed_uber_demo(session)
+        _seed_demo_goals(session)
         return
     ingestion = IngestionRun(
         source="demo", filename="synthetic-fixture",
@@ -140,3 +159,4 @@ def seed_demo(session: Session) -> None:
     GmailSync(session)._persist(connection, DEMO_MESSAGE_ID, message, parse_receipt(message), None)
     session.commit()
     _seed_uber_demo(session)
+    _seed_demo_goals(session)
