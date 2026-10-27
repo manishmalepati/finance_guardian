@@ -410,6 +410,24 @@ button.stackedSegment:hover { filter: brightness(1.22); }
 .recurringEmpty strong { font-size: 13px; }
 .recurringEmpty p { margin-top: 6px; color: #91aec3; font-size: 11px; }
 
+.anomalyPanel { margin-top: 17px; }
+.anomalyPanel .sectionTitle > svg { color: #f2cb91; }
+.anomalyToolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 18px; margin: 19px 0 16px; }
+.anomalyToolbar > label:not(.anomalyToggle) { display: grid; gap: 5px; color: #9bb5c9; font-size: 11px; }
+.anomalyToolbar input[type="date"] { min-height: 36px; padding: 7px 9px; border: 1px solid #37536e; border-radius: 7px; background: #0b1f35; color: #e9f4fb; color-scheme: dark; font-size: 12px; }
+.anomalyToolbar > span { align-self: center; color: #8eaac0; font-size: 11px; }
+.anomalyToggle { display: flex; align-items: center; gap: 6px; margin-left: auto; color: #a8c3d4; font-size: 11px; }
+.anomalyGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 335px), 1fr)); gap: 14px; }
+.anomalyCard { min-width: 0; padding: 18px; border: 1px solid #4c5b6d; border-radius: 12px; background: linear-gradient(150deg, #182e46, #0c2239); }
+.anomalyCard.expected { opacity: .75; }
+.anomalyCard.unexpected { border-color: #bd9467; }
+.anomalyCardHead { display: flex; justify-content: space-between; gap: 12px; }
+.anomalyCardHead h3 { margin: 5px 0 0; font-size: 16px; overflow-wrap: anywhere; }
+.anomalyCardHead strong { flex: 0 0 auto; color: #f2e1c4; font-size: 17px; }
+.anomalyDifference { margin: 14px 0 6px; color: #f3d49d; font-size: 12px; font-weight: 700; }
+.anomalyContext { color: #aec3d1; font-size: 11px; line-height: 1.5; }
+.anomalyCard .recurringReviewed { display: flex; align-items: center; gap: 4px; }
+
 @media (max-width: 1120px) {
   .mainContent { padding-inline: 26px; }
   .sidebar { flex-basis: 210px; }
@@ -457,4 +475,6 @@ button.stackedSegment:hover { filter: brightness(1.22); }
   .explainPeriodGrid .primaryButton { grid-column: 1; }
   .recurringToolbar { align-items: start; flex-direction: column; }
   .recurringToggle { margin-left: 0; }
+  .anomalyToolbar { align-items: start; flex-direction: column; }
+  .anomalyToggle { margin-left: 0; }
 }
