@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from backend.db.session import get_session
 from backend.repositories.transactions import TransactionRepository
+from backend.receipts.context import confirm_match, statuses, transaction_context, unlink_match
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -25,6 +27,7 @@ def list_transactions(
         limit=limit, start_date=start_date, end_date=end_date, query=query,
         account_id=str(account_id) if account_id else None, category_id=category_id, merchant=merchant,
     )
+    receipt_statuses = statuses(session, [transaction.id for transaction, *_ in rows])
     output = []
     for transaction, categorization, category, parent_category in rows:
         output.append(
@@ -51,6 +54,26 @@ def list_transactions(
                 "canonical_merchant_name": categorization.canonical_merchant_name if categorization else None,
                 "categorization_source": categorization.source if categorization else None,
                 "categorization_confidence": categorization.confidence if categorization else None,
+                "receipt_status": receipt_statuses[transaction.id],
             }
         )
     return output
+
+
+class MatchSelection(BaseModel):
+    order_id: UUID
+
+
+@router.get("/{transaction_id}/context")
+def get_context(transaction_id: UUID, session: Session = Depends(get_session)) -> dict:
+    return transaction_context(session, str(transaction_id))
+
+
+@router.post("/{transaction_id}/matches")
+def accept_match(transaction_id: UUID, payload: MatchSelection, session: Session = Depends(get_session)) -> dict:
+    return confirm_match(session, str(transaction_id), str(payload.order_id))
+
+
+@router.delete("/{transaction_id}/matches/{match_id}", status_code=204)
+def remove_match(transaction_id: UUID, match_id: UUID, session: Session = Depends(get_session)) -> None:
+    unlink_match(session, str(transaction_id), str(match_id))

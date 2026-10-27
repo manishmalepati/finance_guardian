@@ -37,6 +37,10 @@ services:
       PLAID_CLIENT_NAME: ${PLAID_CLIENT_NAME:-Finance Guardian}
       PLAID_VAULT_KEY: ${PLAID_VAULT_KEY:-}
       PLAID_VAULT_PATH: ${PLAID_VAULT_PATH:-}
+      GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID:-}
+      GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET:-}
+      GMAIL_REDIRECT_URI: ${GMAIL_REDIRECT_URI:-http://localhost:8000/gmail/callback}
+      GMAIL_TOKEN_KEY: ${GMAIL_TOKEN_KEY:-}
     volumes:
       - ./backend:/app/backend
       - ./dbt:/app/dbt
@@ -47,7 +51,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
 
   frontend:
     build:

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routes import accounts, agent, analytics, budgets, categorization, health, imports, plaid, transactions
+from backend.api.routes import accounts, agent, analytics, budgets, categorization, gmail, goals, health, imports, plaid, receipts, transactions
 from backend.common.exceptions import AppError, app_error_handler
 from backend.db.session import init_database
 
@@ -10,7 +10,7 @@ app.add_exception_handler(AppError, app_error_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:3100"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,9 +25,12 @@ def startup() -> None:
 app.include_router(health.router)
 app.include_router(imports.router, prefix="/imports", tags=["imports"])
 app.include_router(plaid.router, prefix="/plaid", tags=["plaid"])
+app.include_router(gmail.router, prefix="/gmail", tags=["gmail"])
+app.include_router(receipts.router, prefix="/receipts", tags=["receipts"])
 app.include_router(accounts.router, prefix="/accounts", tags=["accounts"])
 app.include_router(transactions.router, prefix="/transactions", tags=["transactions"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(budgets.router, prefix="/budgets", tags=["budgets"])
+app.include_router(goals.router, prefix="/goals", tags=["goals"])
 app.include_router(agent.router, prefix="/agent", tags=["agent"])
 app.include_router(categorization.router, prefix="/categorization", tags=["categorization"])

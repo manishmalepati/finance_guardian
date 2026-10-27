@@ -231,7 +231,7 @@ class CategoryTaxonomy(Base):
 
 
 class MonthlyCategoryLimit(Base):
-    """Recurring monthly spending limit for a parent category."""
+    """Legacy limits retained for migration; Goal is the writable source of truth."""
 
     __tablename__ = "monthly_category_limits"
     __table_args__ = {"schema": "planning"}
@@ -240,6 +240,34 @@ class MonthlyCategoryLimit(Base):
         String(50), ForeignKey("enrichment.category_taxonomy.category_id"), primary_key=True
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class Goal(Base):
+    """One monthly financial target for a taxonomy category or subcategory."""
+
+    __tablename__ = "goals"
+    __table_args__ = (
+        UniqueConstraint("metric_type", "category_id", name="uq_goal_metric_category"),
+        {"schema": "planning"},
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    metric_type: Mapped[str] = mapped_column(String(40), nullable=False, default="monthly_spend")
+    period_type: Mapped[str] = mapped_column(String(30), nullable=False, default="calendar_month")
+    scope_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    category_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("enrichment.category_taxonomy.category_id"), nullable=False
+    )
+    threshold_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    rule_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

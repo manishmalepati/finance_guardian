@@ -68,6 +68,14 @@ class PlaidIntegrationError(AppError):
     user_message = "Plaid integration failed."
 
 
+class GmailIntegrationError(AppError):
+    """A safe message for failed Gmail authorization or synchronization."""
+
+    status_code = status.HTTP_502_BAD_GATEWAY
+    error_code = "gmail_integration_error"
+    user_message = "Gmail integration failed."
+
+
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     """Map expected application exceptions to stable API errors."""
 
