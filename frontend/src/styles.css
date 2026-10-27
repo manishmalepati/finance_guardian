@@ -323,12 +323,64 @@ button.stackedSegment:hover { filter: brightness(1.22); }
 .gmailPanel { margin-bottom: 17px; }
 .dangerLink { color: #ffadb6; }
 
+.explainPage { display: grid; gap: 17px; }
+.explainIntro .sectionTitle > svg { color: #8edbd7; }
+.explainPeriodGrid { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 14px; margin-top: 20px; }
+.explainPeriodGrid fieldset { display: flex; gap: 11px; min-width: 0; margin: 0; padding: 13px; border: 1px solid #35516b; border-radius: 10px; background: #0e263f; }
+.explainPeriodGrid legend { padding: 0 6px; color: #9fbbd1; font-size: 11px; font-weight: 700; }
+.explainPeriodGrid label, .explainFilter { display: grid; flex: 1; gap: 5px; min-width: 0; color: #9bb5c9; font-size: 11px; }
+.explainPeriodGrid input, .explainFilter select { width: 100%; min-height: 36px; padding: 7px 9px; border: 1px solid #37536e; border-radius: 7px; background: #0b1f35; color: #e9f4fb; color-scheme: dark; font-size: 12px; }
+.explainPeriodGrid .primaryButton { min-height: 36px; }
+.explainError { margin-top: 12px; color: #ffb4b8; font-size: 12px; }
+.explainSummary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.explainSummary article { display: grid; gap: 7px; padding: 19px 20px; border: 1px solid #2e4b66; border-radius: 12px; background: linear-gradient(150deg, #132c49, #0c2139); }
+.explainSummary article span { color: #95b1c8; font-size: 11px; }
+.explainSummary article strong { color: #e8f4fd; font-size: clamp(19px, 2vw, 28px); letter-spacing: -.04em; }
+.explainSummary article small { color: #8baac0; font-size: 10px; }
+.explainSummary .explainChange { border-color: #427870; background: linear-gradient(150deg, #1b464d, #102d3d); }
+.explainUp { color: #97e8d2 !important; }
+.explainDown { color: #f0b5a1 !important; }
+.explainInsight { padding: 16px 20px; border-left: 3px solid #78d8c9; border-radius: 8px; background: #143847; }
+.explainInsight span { display: block; color: #8bb9bf; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.explainInsight strong { display: block; margin-top: 5px; color: #e2f6f2; font-size: 15px; }
+.explainInsight p, .explainCaution { margin-top: 6px; color: #a5c2d0; font-size: 11px; }
+.explainCaution { margin: 0; padding: 12px 16px; border: 1px solid #6e5b3d; border-radius: 8px; background: #453c2c; color: #f0d7a8; }
+.explainColumns { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 17px; }
+.explainColumns .surface { min-width: 0; }
+.explainFilter { max-width: 240px; margin: 12px 0 14px; }
+.explainDrivers { margin-top: 15px; border-top: 1px solid #294762; }
+.explainDriver { border-bottom: 1px solid #294762; }
+.explainDriver summary { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(45px, .65fr) 95px 15px; align-items: center; gap: 12px; min-height: 61px; cursor: pointer; list-style: none; }
+.explainDriver summary::-webkit-details-marker { display: none; }
+.explainDriverName { min-width: 0; }
+.explainDriverName strong { display: block; overflow: hidden; color: #eaf4fd; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.explainDriverName small { display: block; margin-top: 3px; color: #819db5; font-size: 10px; }
+.explainDriverTrack { display: block; height: 7px; border-radius: 999px; background: #1e3b54; }
+.explainDriverTrack span { display: block; height: 100%; border-radius: 999px; }
+.explainDriverTrack .up { background: #6bc7b8; }
+.explainDriverTrack .down { background: #d79686; }
+.explainDriver summary > strong { font-size: 12px; text-align: right; white-space: nowrap; }
+.explainChevron { color: #809db7; transition: transform .2s; }
+.explainDriver[open] .explainChevron { transform: rotate(180deg); }
+.explainDriverDetail { padding: 3px 0 17px; }
+.explainDriverFacts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; border-radius: 8px; background: #0b2139; }
+.explainDriverFacts span { display: grid; gap: 3px; color: #8ba8c0; font-size: 10px; }
+.explainDriverFacts strong { color: #e3f1fa; font-size: 11px; }
+.explainDriverDetail p { margin: 11px 0; color: #9bb5c9; font-size: 11px; }
+.explainEvidence > span { display: block; margin-bottom: 7px; color: #91abc2; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.explainEvidence > div { display: flex; flex-wrap: wrap; gap: 6px; max-height: 110px; overflow-y: auto; }
+.explainEvidence button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border: 1px solid #37646b; border-radius: 6px; color: #a4e5dc; background: #173c48; font-size: 10px; cursor: pointer; }
+.explainEvidence button:hover { background: #21515d; }
+.explainEmpty { padding: 18px 0; color: #8ea9c2; font-size: 12px; }
+.explainMethod p { margin-top: 10px; color: #91aec4; font-size: 11px; line-height: 1.6; }
+
 @media (max-width: 1120px) {
   .mainContent { padding-inline: 26px; }
   .sidebar { flex-basis: 210px; }
   .dashboardGrid { grid-template-columns: 1fr; }
   .categoryPanel { min-height: 0; }
   .reportVisualGrid { grid-template-columns: 1fr; }
+  .explainColumns { grid-template-columns: 1fr; }
   .goalForm { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 780px) {
@@ -349,6 +401,8 @@ button.stackedSegment:hover { filter: brightness(1.22); }
   .receiptOrderHead, .receiptSearch, .receiptItemMain, .receiptItemMeta, .gmailConnection { align-items: stretch; flex-direction: column; }
   .receiptCharges { grid-template-columns: 1fr; }
   .goalForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .explainPeriodGrid { grid-template-columns: 1fr 1fr; }
+  .explainPeriodGrid .primaryButton { grid-column: 1 / -1; justify-self: start; }
 }
 @media (max-width: 480px) {
   .mainContent { padding-inline: 14px; }
@@ -363,4 +417,6 @@ button.stackedSegment:hover { filter: brightness(1.22); }
   .goalCardBody { align-items: stretch; flex-direction: column; }
   .goalCardBody .fillTile { flex-basis: auto; width: 170px; }
   .donutWrap { width: 210px; max-width: 100%; margin: 0 auto; }
+  .explainSummary, .explainPeriodGrid { grid-template-columns: 1fr; }
+  .explainPeriodGrid .primaryButton { grid-column: 1; }
 }

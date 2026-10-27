@@ -76,7 +76,7 @@ strategy, Plaid sync lifecycle, PFC mapping strategy, and planned LLM tool surfa
 
 ## Dashboard
 
-The dark dashboard is organized into Overview, Transactions, Reports, Goals,
+The dark dashboard is organized into Overview, Transactions, Reports, Intelligence, Goals,
 Accounts, and Settings. Overview shows posted spending, money in, and net flow as the main
 figures. Pending amounts appear separately and are included in projected totals.
 Known transfers and credit card payments appear as money movements, separate
@@ -88,6 +88,12 @@ Reports has a date range, monthly cash-flow comparison, category trend, and
 category share. Selecting a category opens its transactions with the same date
 range and account filter. Transactions also supports account, date, category,
 and search filters. Reports use posted amounts for trend and share charts.
+
+Intelligence includes Explain My Spending: compare two selected periods, inspect
+category and merchant contributions, separate purchase-count from average-amount
+effects, and open the supporting transactions. Contributions reconcile exactly
+to the change in gross posted purchase debits. See
+`docs/spending-explanation.md` for exclusions, refund handling, and limitations.
 
 Overview shows every spending category in a horizontally scrolling row of
 bottom-filled tiles. An active category goal fills against its monthly cap;
@@ -107,6 +113,7 @@ Analytics endpoints:
 ```text
 GET /accounts
 GET /analytics/spending-report?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID]
+GET /analytics/explain-spending?prior_start=YYYY-MM-DD&prior_end=YYYY-MM-DD&current_start=YYYY-MM-DD&current_end=YYYY-MM-DD[&account_id=UUID][&currency=USD]
 GET /transactions?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID][&category_id=ID]
 ```
 
