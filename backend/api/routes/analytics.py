@@ -1,14 +1,51 @@
 from datetime import date
+import re
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.db.session import get_session
 from backend.services.analytics import AnalyticsService
 from backend.services.spending_explanation import SpendingExplanationService
+from backend.services.recurrence import RecurrenceService
 
 router = APIRouter()
+
+
+@router.get("/recurring-charges")
+def recurring_charges(
+    as_of: date | None = None,
+    account_id: UUID | None = None,
+    session: Session = Depends(get_session),
+) -> dict:
+    as_of = as_of or date.today()
+    if as_of > date.today():
+        raise HTTPException(status_code=400, detail="As-of date cannot be in the future.")
+    return RecurrenceService(session).list_candidates(as_of, str(account_id) if account_id else None)
+
+
+class RecurringReviewSelection(BaseModel):
+    decision: Literal["confirmed", "not_recurring", "unreviewed"]
+    as_of: date
+
+
+@router.put("/recurring-charges/{series_key}/review")
+def review_recurring_charge(
+    series_key: str,
+    payload: RecurringReviewSelection,
+    session: Session = Depends(get_session),
+) -> dict:
+    if not re.fullmatch(r"[0-9a-f]{64}", series_key):
+        raise HTTPException(status_code=400, detail="Invalid recurring series key.")
+    if payload.as_of > date.today():
+        raise HTTPException(status_code=400, detail="As-of date cannot be in the future.")
+    try:
+        return RecurrenceService(session).review(series_key, payload.decision, payload.as_of)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/explain-spending")
