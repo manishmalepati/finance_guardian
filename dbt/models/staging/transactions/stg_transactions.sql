@@ -5,7 +5,8 @@ with active_categorizations as (
         canonical_merchant_name,
         category_id,
         source as categorization_source,
-        confidence as categorization_confidence
+        confidence as categorization_confidence,
+        row_number() over (partition by transaction_id order by updated_at desc, id desc) as active_rank
     from {{ source('enrichment', 'transaction_categorizations') }}
     where status = 'active'
 )
@@ -37,7 +38,7 @@ select
     t.row_number,
     t.created_at
 from {{ source('core', 'transactions') }} t
-left join active_categorizations c on c.transaction_id = t.id
+left join active_categorizations c on c.transaction_id = t.id and c.active_rank = 1
 left join {{ source('enrichment', 'category_taxonomy') }} ct on ct.category_id = c.category_id
 left join {{ source('enrichment', 'category_taxonomy') }} parent_ct on parent_ct.category_id = ct.parent_category_id
 where t.status in ('active', 'pending')
