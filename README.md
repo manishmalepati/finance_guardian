@@ -94,6 +94,9 @@ category and merchant contributions, separate purchase-count from average-amount
 effects, and open the supporting transactions. Contributions reconcile exactly
 to the change in gross posted purchase debits. See
 `docs/spending-explanation.md` for exclusions, refund handling, and limitations.
+It also shows possible recurring-charge patterns, estimated next dates, supporting
+transactions, and persistent confirm/dismiss controls. See
+`docs/recurring-charges.md` for the rules and limitations.
 
 Overview shows every spending category in a horizontally scrolling row of
 bottom-filled tiles. An active category goal fills against its monthly cap;
@@ -114,6 +117,8 @@ Analytics endpoints:
 GET /accounts
 GET /analytics/spending-report?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID]
 GET /analytics/explain-spending?prior_start=YYYY-MM-DD&prior_end=YYYY-MM-DD&current_start=YYYY-MM-DD&current_end=YYYY-MM-DD[&account_id=UUID][&currency=USD]
+GET /analytics/recurring-charges?as_of=YYYY-MM-DD[&account_id=UUID]
+PUT /analytics/recurring-charges/{series_key}/review  {"decision": "confirmed", "as_of": "YYYY-MM-DD"}
 GET /transactions?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID][&category_id=ID]
 ```
 
@@ -132,7 +137,7 @@ GET    /goals/evaluations?month=YYYY-MM
 GET    /goals/{goal_id}/evaluation?month=YYYY-MM
 ```
 
-Startup applies additive receipt and goal migrations to an existing database.
+Startup applies additive receipt, goal, and recurring-review migrations to an existing database.
 Keep the PostgreSQL volume when updating:
 
 ```bash

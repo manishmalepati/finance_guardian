@@ -374,6 +374,42 @@ button.stackedSegment:hover { filter: brightness(1.22); }
 .explainEmpty { padding: 18px 0; color: #8ea9c2; font-size: 12px; }
 .explainMethod p { margin-top: 10px; color: #91aec4; font-size: 11px; line-height: 1.6; }
 
+.recurringPanel { margin-top: 17px; }
+.recurringPanel .sectionTitle > svg { color: #8edbd7; }
+.recurringToolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 20px; margin: 19px 0 16px; }
+.recurringToolbar > label:not(.recurringToggle) { display: grid; gap: 5px; color: #9bb5c9; font-size: 11px; }
+.recurringToolbar input[type="date"] { min-height: 36px; padding: 7px 9px; border: 1px solid #37536e; border-radius: 7px; background: #0b1f35; color: #e9f4fb; color-scheme: dark; font-size: 12px; }
+.recurringToolbar > span { align-self: center; color: #8eaac0; font-size: 11px; }
+.recurringToggle { display: flex; align-items: center; gap: 6px; margin-left: auto; color: #a8c3d4; font-size: 11px; }
+.recurringGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 335px), 1fr)); gap: 14px; }
+.recurringCard { position: relative; min-width: 0; padding: 18px; border: 1px solid #31516d; border-radius: 12px; background: linear-gradient(150deg, #122d4a, #0d2239); }
+.recurringCard.confirmed { border-color: #4b9e8c; }
+.recurringCard.not_recurring { opacity: .78; }
+.recurringCardTop { display: flex; justify-content: space-between; gap: 12px; }
+.recurringCardTop h3 { margin: 5px 0 4px; color: #edf7fc; font-size: 16px; overflow-wrap: anywhere; }
+.recurringCardTop small { color: #8faac1; font-size: 10px; }
+.recurringCadence { color: #8bd9d1; font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.recurringTiming { align-self: start; flex: 0 0 auto; padding: 5px 7px; border-radius: 999px; background: #214c4b; color: #a4e4d8; font-size: 9px; white-space: nowrap; }
+.recurringTiming.overdue { background: #514332; color: #f4d5a0; }
+.recurringNext { display: grid; gap: 5px; margin-top: 18px; padding: 13px; border: 1px solid #2f586a; border-radius: 8px; background: #0c263a; }
+.recurringNext span { color: #91b1c4; font-size: 10px; }
+.recurringNext strong { color: #e8f6f6; font-size: 20px; letter-spacing: -.03em; }
+.recurringNext small { color: #a2c4cd; font-size: 11px; }
+.recurringFacts { display: flex; flex-wrap: wrap; gap: 7px 14px; margin-top: 13px; color: #a3b9cb; font-size: 10px; }
+.recurringIncrease { margin-top: 13px; padding: 9px 10px; border-left: 2px solid #f0c987; border-radius: 4px; background: #3c3c3d; color: #f3dbae; font-size: 11px; }
+.recurringEvidence { margin-top: 14px; border-top: 1px solid #2e4e67; padding-top: 11px; }
+.recurringEvidence summary { color: #99dfd7; cursor: pointer; font-size: 11px; font-weight: 700; }
+.recurringEvidence p { margin: 9px 0; color: #aac1d1; font-size: 11px; line-height: 1.5; }
+.recurringEvidence > div { display: flex; flex-wrap: wrap; gap: 6px; max-height: 110px; overflow-y: auto; }
+.recurringEvidence button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border: 1px solid #37646b; border-radius: 6px; color: #a4e5dc; background: #173c48; font-size: 10px; cursor: pointer; }
+.recurringActions { display: flex; flex-wrap: wrap; gap: 7px 12px; margin-top: 17px; }
+.recurringActions .secondaryButton { min-height: 30px; padding: 6px 9px; font-size: 10px; }
+.recurringActions .textButton { font-size: 10px; }
+.recurringReviewed { display: block; margin-top: 10px; color: #9edbce; font-size: 10px; }
+.recurringEmpty { padding: 22px; border: 1px dashed #385670; border-radius: 10px; color: #c7dbe9; }
+.recurringEmpty strong { font-size: 13px; }
+.recurringEmpty p { margin-top: 6px; color: #91aec3; font-size: 11px; }
+
 @media (max-width: 1120px) {
   .mainContent { padding-inline: 26px; }
   .sidebar { flex-basis: 210px; }
@@ -419,4 +455,6 @@ button.stackedSegment:hover { filter: brightness(1.22); }
   .donutWrap { width: 210px; max-width: 100%; margin: 0 auto; }
   .explainSummary, .explainPeriodGrid { grid-template-columns: 1fr; }
   .explainPeriodGrid .primaryButton { grid-column: 1; }
+  .recurringToolbar { align-items: start; flex-direction: column; }
+  .recurringToggle { margin-left: 0; }
 }

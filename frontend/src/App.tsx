@@ -10,6 +10,7 @@ import type { ReportMonth, SpendingReport } from "./ReportCharts";
 import { CategoryFillTile } from "./CategoryFillTile";
 import { GoalsPage } from "./GoalsPage";
 import { ExplainSpendingPage } from "./ExplainSpendingPage";
+import { RecurringChargesPanel } from "./RecurringChargesPanel";
 import type { GoalEvaluation } from "./goalTypes";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -703,6 +704,9 @@ export default function App() {
       {page === "intelligence" && <>
         <div className="pageHeading"><div><div className="eyebrow">INTELLIGENCE</div><h1>Explain my spending</h1><p>See which purchases changed your spending between two periods.</p></div>{accountSelect}</div>
         <ExplainSpendingPage apiBaseUrl={API_BASE_URL} accountId={accountId}
+          onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+        <RecurringChargesPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
+          accountNames={new Map(accounts.map((account) => [account.id, account.name]))}
           onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
       </>}
 
