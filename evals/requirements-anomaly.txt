@@ -1,0 +1,2 @@
+# Offline synthetic benchmark only; the API does not import this package.
+scikit-learn==1.9.1

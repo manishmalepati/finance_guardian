@@ -372,3 +372,22 @@ class RecurringReview(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class AnomalyReview(Base):
+    """User judgment for a canonical transaction alert."""
+
+    __tablename__ = "anomaly_reviews"
+    __table_args__ = (
+        CheckConstraint("decision in ('expected', 'unexpected')", name="ck_anomaly_review_decision"),
+        {"schema": "analytics"},
+    )
+
+    transaction_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("core.transactions.id", ondelete="CASCADE"), primary_key=True
+    )
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
