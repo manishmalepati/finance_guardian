@@ -27,6 +27,7 @@ def init_database() -> None:
         connection.execute(text("create schema if not exists core"))
         connection.execute(text("create schema if not exists enrichment"))
         connection.execute(text("create schema if not exists planning"))
+        connection.execute(text("create schema if not exists analytics"))
     Base.metadata.create_all(bind=engine)
     run_migrations(engine)
     with SessionLocal() as session:

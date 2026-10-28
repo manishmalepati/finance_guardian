@@ -1,0 +1,11 @@
+# Recurring-charge candidates
+
+The Intelligence page shows possible recurring charges as of a selected date. `GET /analytics/recurring-charges?as_of=YYYY-MM-DD[&account_id=UUID]` returns candidates with account, currency, cadence, observed amount range, next expected date, timing evidence, and supporting canonical transaction IDs. `PUT /analytics/recurring-charges/{series_key}/review` stores `confirmed`, `not_recurring`, or `unreviewed` with the as-of date. A stable hash of account, currency, and normalized merchant identifies a series; the review table stores no transaction descriptions or ledger amounts.
+
+The rules use up to three years of posted history. They exclude pending, removed, superseded, credit, known transfer/card-payment, and missing-currency records. An exact same-account/date/amount/currency/merchant statement-Plaid pair counts once. Candidate groups remain separate by account and currency. A group needs at least three distinct dates, at least two near-regular intervals, at least 75% interval agreement, and median absolute amount deviation no more than 45% of its median amount. Supported intervals are weekly (7 ± 2 days), biweekly (14 ± 2), monthly (30 ± 3), and yearly (365 ± 14). Stale patterns are omitted.
+
+Next dates use the last observed date; monthly and yearly dates preserve an approximate calendar-day anchor. They are estimates, not scheduled charges or guarantees. Confidence is a qualitative heuristic, not a probability. A repeated grocery merchant can still pass; review controls let the user confirm or dismiss it. Only confirmed candidates should later be described as user-confirmed recurring charges. The UI never calls a candidate a subscription.
+
+The additive migration creates `analytics.recurring_reviews` without changing transactions or categorization. An encrypted local PostgreSQL backup was verified before it was applied. The detector has synthetic tests for cadence jitter, month ends and leap years, annual sparsity, variable groceries, stale series, pending-to-posted changes, transfers, credits, currencies, and exact statement/Plaid overlap.
+
+There are no independently reviewed recurrence labels yet. Precision and recall should be measured from user decisions before changing thresholds or training a classifier. Review records are feedback, not a proof that the future payment will occur.

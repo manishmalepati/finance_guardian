@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -351,6 +351,42 @@ class TransactionCategorization(Base):
     source: Mapped[str] = mapped_column(String(30), nullable=False)
     confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False, default=Decimal("1.000"))
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class RecurringReview(Base):
+    """User judgment for a stable merchant/account/currency recurring series."""
+
+    __tablename__ = "recurring_reviews"
+    __table_args__ = (
+        CheckConstraint("decision in ('confirmed', 'not_recurring')", name="ck_recurring_review_decision"),
+        {"schema": "analytics"},
+    )
+
+    series_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class AnomalyReview(Base):
+    """User judgment for a canonical transaction alert."""
+
+    __tablename__ = "anomaly_reviews"
+    __table_args__ = (
+        CheckConstraint("decision in ('expected', 'unexpected')", name="ck_anomaly_review_decision"),
+        {"schema": "analytics"},
+    )
+
+    transaction_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("core.transactions.id", ondelete="CASCADE"), primary_key=True
+    )
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

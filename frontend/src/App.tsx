@@ -9,10 +9,13 @@ import { CategoryShare, CategoryTrend } from "./ReportCharts";
 import type { ReportMonth, SpendingReport } from "./ReportCharts";
 import { CategoryFillTile } from "./CategoryFillTile";
 import { GoalsPage } from "./GoalsPage";
+import { ExplainSpendingPage } from "./ExplainSpendingPage";
+import { RecurringChargesPanel } from "./RecurringChargesPanel";
+import { AnomalyPanel } from "./AnomalyPanel";
 import type { GoalEvaluation } from "./goalTypes";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-const pages = ["overview", "transactions", "reports", "goals", "accounts", "settings"] as const;
+const pages = ["overview", "transactions", "reports", "intelligence", "goals", "accounts", "settings"] as const;
 type Page = typeof pages[number];
 
 type Transaction = {
@@ -647,6 +650,7 @@ export default function App() {
         <button className={page === "overview" ? "navItem active" : "navItem"} onClick={() => navigate("overview")} aria-current={page === "overview" ? "page" : undefined}><LayoutDashboard size={18} />Overview</button>
         <button className={page === "transactions" ? "navItem active" : "navItem"} onClick={() => navigate("transactions")} aria-current={page === "transactions" ? "page" : undefined}><List size={18} />Transactions</button>
         <button className={page === "reports" ? "navItem active" : "navItem"} onClick={() => navigate("reports")} aria-current={page === "reports" ? "page" : undefined}><ChartNoAxesCombined size={18} />Reports</button>
+        <button className={page === "intelligence" ? "navItem active" : "navItem"} onClick={() => navigate("intelligence")} aria-current={page === "intelligence" ? "page" : undefined}><Sparkles size={18} />Intelligence</button>
         <button className={page === "goals" ? "navItem active" : "navItem"} onClick={() => navigate("goals")} aria-current={page === "goals" ? "page" : undefined}><WalletCards size={18} />Goals</button>
       </nav>
       <div className="navLabel utilityLabel">MANAGE</div>
@@ -697,6 +701,17 @@ export default function App() {
       {page === "goals" && <GoalsPage evaluations={goalEvaluations} priorEvaluations={priorGoalEvaluations} categories={categories} month={month}
         onMonthChange={setMonth} onRefresh={refresh}
         onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />}
+
+      {page === "intelligence" && <>
+        <div className="pageHeading"><div><div className="eyebrow">INTELLIGENCE</div><h1>Explain my spending</h1><p>See which purchases changed your spending between two periods.</p></div>{accountSelect}</div>
+        <ExplainSpendingPage apiBaseUrl={API_BASE_URL} accountId={accountId}
+          onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+        <RecurringChargesPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
+          accountNames={new Map(accounts.map((account) => [account.id, account.name]))}
+          onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+        <AnomalyPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
+          onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+      </>}
 
       {page === "transactions" && <>
         <div className="pageHeading"><div><div className="eyebrow">ACTIVITY</div><h1>Transactions</h1><p>Find activity and keep categories accurate.</p></div>{accountSelect}</div>

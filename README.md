@@ -76,7 +76,7 @@ strategy, Plaid sync lifecycle, PFC mapping strategy, and planned LLM tool surfa
 
 ## Dashboard
 
-The dark dashboard is organized into Overview, Transactions, Reports, Goals,
+The dark dashboard is organized into Overview, Transactions, Reports, Intelligence, Goals,
 Accounts, and Settings. Overview shows posted spending, money in, and net flow as the main
 figures. Pending amounts appear separately and are included in projected totals.
 Known transfers and credit card payments appear as money movements, separate
@@ -88,6 +88,19 @@ Reports has a date range, monthly cash-flow comparison, category trend, and
 category share. Selecting a category opens its transactions with the same date
 range and account filter. Transactions also supports account, date, category,
 and search filters. Reports use posted amounts for trend and share charts.
+
+Intelligence includes Explain My Spending: compare two selected periods, inspect
+category and merchant contributions, separate purchase-count from average-amount
+effects, and open the supporting transactions. Contributions reconcile exactly
+to the change in gross posted purchase debits. See
+`docs/spending-explanation.md` for exclusions, refund handling, and limitations.
+It also shows possible recurring-charge patterns, estimated next dates, supporting
+transactions, and persistent confirm/dismiss controls. See
+`docs/recurring-charges.md` for the rules and limitations.
+It also ranks unusually large settled charges against earlier history, supports
+transaction drill-down, and saves expected/unexpected feedback. See
+`docs/unusual-charges.md` for the statistical baseline, synthetic Isolation Forest
+comparison, and the current absence of reviewed real-world labels.
 
 Overview shows every spending category in a horizontally scrolling row of
 bottom-filled tiles. An active category goal fills against its monthly cap;
@@ -107,6 +120,11 @@ Analytics endpoints:
 ```text
 GET /accounts
 GET /analytics/spending-report?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID]
+GET /analytics/explain-spending?prior_start=YYYY-MM-DD&prior_end=YYYY-MM-DD&current_start=YYYY-MM-DD&current_end=YYYY-MM-DD[&account_id=UUID][&currency=USD]
+GET /analytics/recurring-charges?as_of=YYYY-MM-DD[&account_id=UUID]
+PUT /analytics/recurring-charges/{series_key}/review  {"decision": "confirmed", "as_of": "YYYY-MM-DD"}
+GET /analytics/anomalies?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&currency=USD][&account_id=UUID]
+PUT /analytics/anomalies/{transaction_id}/review  {"decision": "expected", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "currency": "USD"}
 GET /transactions?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID][&category_id=ID]
 ```
 
@@ -125,7 +143,7 @@ GET    /goals/evaluations?month=YYYY-MM
 GET    /goals/{goal_id}/evaluation?month=YYYY-MM
 ```
 
-Startup applies additive receipt and goal migrations to an existing database.
+Startup applies additive receipt, goal, recurring-review, and anomaly-review migrations to an existing database.
 Keep the PostgreSQL volume when updating:
 
 ```bash
