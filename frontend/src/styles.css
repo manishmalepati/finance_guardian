@@ -282,6 +282,7 @@ button.stackedSegment:hover { filter: brightness(1.22); }
 .subtleButton { width: 28px; height: 28px; color: #9db5cb; background: transparent; border: 0; }
 .settings .surface { margin-bottom: 17px; }
 .mainContent > .surface + .surface { margin-top: 17px; }
+.intelligenceStack > * + * { margin-top: 17px; }
 .inlineActions { margin-top: 15px; margin-bottom: 0; }
 .jobList { margin-top: 20px; padding-top: 16px; border-top: 1px solid #294762; }
 .jobList > strong { display: block; margin-bottom: 7px; font-size: 12px; }
