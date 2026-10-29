@@ -102,7 +102,8 @@ def test_scoped_legacy_tools_use_exact_gross_debits(monkeypatch):
     from decimal import Decimal
     tools = FinanceTools(None)
     rows = [{"id": "a", "posted_date": date(2026, 1, 5), "amount": Decimal("10.10"),
-             "category_id": "groceries", "merchant": "Synthetic Market"},
+             "category_id": "groceries", "merchant": "Synthetic Market",
+             "description": "Synthetic Reference 123"},
             {"id": "b", "posted_date": date(2026, 1, 12), "amount": Decimal("20.20"),
              "category_id": "groceries", "merchant": "Synthetic Market"}]
     monkeypatch.setattr(tools, "_eligible_rows", lambda *args: rows)
@@ -112,6 +113,7 @@ def test_scoped_legacy_tools_use_exact_gross_debits(monkeypatch):
     categories = tools.get_spending_by_category(end_date=date(2026, 1, 31))
     assert categories[0]["gross_posted_purchases"] == "30.30"
     assert tools.get_largest_transactions(limit=1, as_of=date(2026, 1, 31))[0]["id"] == "b"
+    assert tools.search_transactions("Reference", end_date=date(2026, 1, 31))[0]["id"] == "a"
 
 
 def test_privacy_config_requires_explicit_cloud_opt_in_and_accepts_ollama():

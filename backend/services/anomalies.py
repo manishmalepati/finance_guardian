@@ -104,6 +104,7 @@ class AnomalyService:
             "replaced_by_transaction_id": item["replaced_by_transaction_id"],
             "currency": item["iso_currency_code"], "source": item["source"],
             "category_id": item["category_id"],
+            "description": item["description"],
             "merchant": (item["canonical_merchant_name"] or item["merchant_name"] or item["description"]).strip(),
             "normalized_merchant": item["normalized_merchant"],
         } for item in self.session.execute(statement).mappings()]

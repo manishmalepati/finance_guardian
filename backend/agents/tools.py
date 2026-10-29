@@ -349,7 +349,8 @@ class FinanceTools:
                             currency: str = "USD", account_id: UUID | None = None) -> list[dict]:
         end = end_date or date.today()
         rows = self._eligible_rows(start_date or end - timedelta(days=365), end, currency, account_id)
-        matched = [row for row in rows if query.casefold() in row["merchant"].casefold()]
+        matched = [row for row in rows if query.casefold() in row["merchant"].casefold()
+                   or query.casefold() in row.get("description", "").casefold()]
         return [{"id": row["id"], "posted_date": row["posted_date"].isoformat(),
                  "merchant": row["merchant"][:120], "amount": str(row["amount"]),
                  "currency": currency} for row in sorted(
