@@ -15,6 +15,7 @@ from backend.common.exceptions import AgentExecutionError, ConfigurationError
 from backend.core.config import settings
 from backend.db.models import (
     CategorizationJob,
+    CategorizationCorrection,
     CategoryTaxonomy,
     MerchantAlias,
     PlaidCategoryMapping,
@@ -673,6 +674,12 @@ class CategorizationService:
             )
             matching_transactions_updated = 1
 
+        # Record only the transaction explicitly selected by the user. Alias
+        # propagation may update many transactions, but is one human choice.
+        self.session.add(CategorizationCorrection(
+            transaction_id=transaction_id, category_id=category_id,
+            source="user_explicit",
+        ))
         self.session.commit()
         return {
             "transaction_id": transaction_id,

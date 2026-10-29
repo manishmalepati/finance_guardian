@@ -12,6 +12,9 @@ import { GoalsPage } from "./GoalsPage";
 import { ExplainSpendingPage } from "./ExplainSpendingPage";
 import { RecurringChargesPanel } from "./RecurringChargesPanel";
 import { AnomalyPanel } from "./AnomalyPanel";
+import { BehavioralAlertsPanel } from "./BehavioralAlertsPanel";
+import { ForecastPanel } from "./ForecastPanel";
+import { InvestigatorPanel } from "./InvestigatorPanel";
 import type { GoalEvaluation } from "./goalTypes";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -704,13 +707,29 @@ export default function App() {
 
       {page === "intelligence" && <>
         <div className="pageHeading"><div><div className="eyebrow">INTELLIGENCE</div><h1>Explain my spending</h1><p>See which purchases changed your spending between two periods.</p></div>{accountSelect}</div>
+        <div className="intelligenceStack">
+        <InvestigatorPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
+          onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+        <div id="intelligence">
         <ExplainSpendingPage apiBaseUrl={API_BASE_URL} accountId={accountId}
           onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+        </div>
+        <div id="recurring-charges">
         <RecurringChargesPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
           accountNames={new Map(accounts.map((account) => [account.id, account.name]))}
           onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+        </div>
         <AnomalyPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
           onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+        <div id="behavioral-alerts"><BehavioralAlertsPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
+          onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+        </div>
+        <div id="forecast"><ForecastPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
+          categories={categories.flatMap((category) => [
+            { id: category.category_id, name: category.display_name },
+            ...category.subcategories.map((sub) => ({ id: sub.category_id, name: `${category.display_name} / ${sub.display_name}` })),
+          ])} /></div>
+        </div>
       </>}
 
       {page === "transactions" && <>

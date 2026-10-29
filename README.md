@@ -1,4 +1,4 @@
-# finance_guardian
+# Financial Guardian
 
 Personal Finance Guardian helps you understand your transactions, analyze spending,
 and ask grounded finance questions over local data.
@@ -11,11 +11,12 @@ The first phase is a local-first modular monolith:
 - `backend`: FastAPI, Plaid and targeted Gmail receipt ingestion, statement ingestion, analytics services, LangGraph agent, dbt CLI.
 - `postgres`: durable local database backed by a Docker named volume.
 - `dbt`: raw -> staging -> core -> marts transformations over source-agnostic transactions.
-- `evals`: small live-agent eval suite for tool choice and grounded responses.
+- `evals`: deterministic synthetic anomaly, forecast, categorization, and investigator evaluations, plus a separate optional live-agent suite.
 
-The agent is intentionally bounded: it routes finance questions to approved tools,
-the tools calculate using code/SQL, and the agent synthesizes the answer. Chat
-requires a real LLM provider configuration and returns an error until one is set.
+The agent is intentionally bounded: it routes finance questions to approved read-only tools,
+the tools calculate using code/SQL, and the backend renders final numerical facts.
+The model may select fact IDs for a concise answer but cannot author its amounts.
+Chat requires explicit local or cloud provider configuration.
 
 ## Local Setup
 
@@ -102,6 +103,39 @@ transaction drill-down, and saves expected/unexpected feedback. See
 `docs/unusual-charges.md` for the statistical baseline, synthetic Isolation Forest
 comparison, and the current absence of reviewed real-world labels.
 
+The Intelligence page also shows completed-week purchase-frequency bursts,
+sustained category spending increases, and recurring-price changes with evidence
+and persistent reviews. The Forecast panel compares daily run rate and historical
+monthly median using chronological cutoffs, shows a historical-error range only
+when enough residuals exist, and describes current goal overrun status without
+claiming a probability. The Financial Investigator can combine up to three
+validated tools to answer a question with transaction links. These features
+use gross settled purchase debits in one currency at a time. Credits and
+possible refunds are excluded unless explicitly reconciled; known transfers,
+pending, removed, superseded, and exact statement/Plaid duplicates are excluded.
+
+| Capability | Status | Evaluation |
+| --- | --- | --- |
+| Robust amount, frequency, drift, recurring-price alerts | Served statistical rules | Four simple synthetic scenarios: 4/4 detected; no real-world precision estimate |
+| Month-end spending forecast and goal status | Served statistical baselines | 18-month synthetic groceries series: historical median MAE $2.80 on 45 common cutoffs; sporadic travel abstains |
+| TF-IDF plus logistic regression categorization | Offline experiment only | 144 easy synthetic examples: 100% on chronological and merchant-held-out tests; weak score calibration, no real-data claim |
+| Isolation Forest anomaly benchmark | Offline experiment only | Separate transaction-level synthetic comparison; never served |
+| Financial Investigator | Served when provider configured | Four fake-provider synthetic cases passed scope, evidence, and injection checks; no live-model quality estimate |
+
+Architecture and learning guides: [architecture](docs/intelligence/architecture.md),
+[execution plan](docs/intelligence/execution-plan.md),
+[anomaly engineering](docs/intelligence/01-anomaly-engineering-guide.md),
+[forecasting](docs/intelligence/02-forecasting-engineering-guide.md),
+[ML categorization](docs/intelligence/03-ml-categorization-guide.md), and
+[agent engineering](docs/intelligence/04-agent-engineering-guide.md).
+Reproduce the experiments with `python -m evals.multi_signal_benchmark`,
+`python -m evals.forecast_benchmark`, `python -m evals.categorization_experiment`,
+and `python -m evals.investigator_benchmark` from the repository root.
+All default datasets are synthetic. Local private training artifacts remain under
+ignored `.local/models`; real transaction text is never sent to public evaluations.
+Current checks could not reach local PostgreSQL, so live aggregate coverage and
+the new migration persistence tests remain unverified in this environment.
+
 Overview shows every spending category in a horizontally scrolling row of
 bottom-filled tiles. An active category goal fills against its monthly cap;
 projected overages get a red border and alert. Categories without goals use a
@@ -125,6 +159,10 @@ GET /analytics/recurring-charges?as_of=YYYY-MM-DD[&account_id=UUID]
 PUT /analytics/recurring-charges/{series_key}/review  {"decision": "confirmed", "as_of": "YYYY-MM-DD"}
 GET /analytics/anomalies?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&currency=USD][&account_id=UUID]
 PUT /analytics/anomalies/{transaction_id}/review  {"decision": "expected", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "currency": "USD"}
+GET /analytics/behavioral-alerts?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&currency=USD][&account_id=UUID]
+PUT /analytics/behavioral-alerts/{alert_id}/review  {"decision": "expected", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "currency": "USD"}
+GET /analytics/spending-forecast?as_of=YYYY-MM-DD[&category_id=ID][&currency=USD][&account_id=UUID]
+POST /agent/chat  {"message": "Why did my spending rise?", "account_id": null, "currency": "USD"}
 GET /transactions?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&account_id=UUID][&category_id=ID]
 ```
 
@@ -143,7 +181,8 @@ GET    /goals/evaluations?month=YYYY-MM
 GET    /goals/{goal_id}/evaluation?month=YYYY-MM
 ```
 
-Startup applies additive receipt, goal, recurring-review, and anomaly-review migrations to an existing database.
+Startup applies additive receipt, goal, recurring-review, anomaly-review,
+behavioral-review, and explicit-categorization-correction migrations to an existing database.
 Keep the PostgreSQL volume when updating:
 
 ```bash
@@ -315,18 +354,36 @@ docker compose exec postgres psql -U finance_guardian -d finance_guardian -c "se
 
 ## Agent Configuration
 
-The app does not provide mock chat answers. Configure Claude before using
-`POST /agent/chat`:
+The app does not provide mock chat answers. Finance inference stays local by
+default. To use a local or separately hosted trusted Ollama server:
 
-```bash
+```text
+LLM_PROVIDER=ollama
+LLM_MODEL=your_local_model
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+FINANCE_LLM_PRIVACY=local_only
+```
+
+To explicitly allow finance data to reach Anthropic, configure:
+
+```text
 LLM_PROVIDER=anthropic
 LLM_MODEL=claude-sonnet-4-5
 ANTHROPIC_API_KEY=your_key_here
+FINANCE_LLM_PRIVACY=allow_cloud
 ```
 
-The eval runner also requires this configuration because it exercises the real
-agent path. The MVP keeps Claude responses capped at 300 output tokens to limit
-cost and keep answers concise.
+There is no automatic cloud fallback if Ollama is unavailable. Provider requests
+are bounded and transaction descriptions are treated as untrusted data. The
+`OLLAMA_BASE_URL` address is reached from the backend process; when using Docker,
+set it to a trusted host reachable from the backend container rather than assuming
+that container localhost is your model host. Keep the Ollama listener private.
+The optional live eval runner requires a configured provider and database; ordinary
+tests use fake providers and make no paid calls. For a short product demo, run
+the isolated synthetic demo stack, open **Intelligence**, compare two periods,
+review behavioral alerts, inspect the month-end forecast, and ask the
+Investigator a question after configuring a provider. Screenshots require a
+running frontend and synthetic demo data; none are included in this checkout.
 
 ## License
 

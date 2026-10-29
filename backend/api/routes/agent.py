@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
+from uuid import UUID
+from datetime import date
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -12,7 +14,16 @@ router = APIRouter()
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(min_length=1, max_length=600)
+    account_id: UUID | None = None
+    currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    as_of: date | None = None
+
+    @model_validator(mode="after")
+    def valid_as_of(self):
+        if self.as_of and self.as_of > date.today():
+            raise ValueError("As-of date cannot be in the future")
+        return self
 
 
 @router.post("/chat")
@@ -23,7 +34,9 @@ def chat(request: ChatRequest, session: Session = Depends(get_session)) -> dict:
 
     llm_provider = LLMProviderFactory(settings).build()
     try:
-        result = FinanceAgent(session, llm_provider=llm_provider).invoke(request.message)
+        result = FinanceAgent(session, llm_provider=llm_provider).invoke(
+            request.message, account_id=str(request.account_id) if request.account_id else None,
+            currency=request.currency, as_of=request.as_of.isoformat() if request.as_of else date.today().isoformat())
     except AgentExecutionError:
         raise
     except Exception as exc:
@@ -32,4 +45,8 @@ def chat(request: ChatRequest, session: Session = Depends(get_session)) -> dict:
         "answer": result["answer"],
         "selected_tool": result["selected_tool"],
         "tool_result": result["tool_result"],
+        "tools_used": result.get("tools_used", []),
+        "facts": result.get("facts", []),
+        "evidence_transaction_ids": result.get("evidence_transaction_ids", []),
+        "limitations": result.get("errors", []),
     }

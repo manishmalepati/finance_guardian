@@ -1,0 +1,5 @@
+# Forecasting experiment record
+
+Command: `.\.venv\Scripts\python.exe -m evals.forecast_benchmark` from the repository root. The generator has no randomness and builds 18 synthetic completed months plus a current partial month. It evaluates cutoffs on days 7, 15, and 22. The report prints per-method MAE, WAPE, common-case MAE, interval coverage, interval width, and error by cutoff day. The methods use Decimal amounts and only earlier posted dates for features. Intervals at a historical cutoff use errors from older months.
+
+Measured on 2026-10-28: for steady groceries, 45 comparable cutoffs gave historical median MAE $2.80 versus daily run-rate MAE $6.21. Historical median interval coverage was 1.0 over 39 cases with $8.00 mean width. For sporadic travel, historical median MAE was $28.33, WAPE 0.405, and the current forecast abstained. The travel example shows why a low median error alone is insufficient to serve a zero projection. These synthetic results are regression and design evidence, not estimates of real-user accuracy. The local database could not be reached, so no live coverage-based candidate comparison was possible.

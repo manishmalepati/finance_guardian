@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     llm_model: str = ""
     anthropic_api_key: str = ""
     anthropic_workspace_id: str = ""
+    finance_llm_privacy: str = "local_only"
+    ollama_base_url: str = "http://127.0.0.1:11434"
     plaid_client_id: str = ""
     plaid_secret: str = ""
     plaid_env: str = "sandbox"
@@ -31,10 +33,20 @@ class Settings(BaseSettings):
         """Return a user-safe error when chat cannot use a real LLM."""
 
         provider = self.llm_provider.strip().lower()
-        if provider != "anthropic":
-            return "Agent is not configured. Set LLM_PROVIDER to 'anthropic'."
+        if provider not in {"anthropic", "ollama"}:
+            return "Agent is not configured. Set LLM_PROVIDER to 'anthropic' or 'ollama'."
         if not self.llm_model.strip():
             return "Agent is not configured. Set LLM_MODEL for the selected provider."
+        if self.finance_llm_privacy not in {"local_only", "allow_cloud"}:
+            return "Set FINANCE_LLM_PRIVACY to 'local_only' or 'allow_cloud'."
+        if provider == "ollama":
+            from urllib.parse import urlparse
+            url = urlparse(self.ollama_base_url)
+            if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password:
+                return "Set OLLAMA_BASE_URL to a valid HTTP(S) address without credentials."
+            return None
+        if self.finance_llm_privacy != "allow_cloud":
+            return "Cloud finance inference requires FINANCE_LLM_PRIVACY=allow_cloud."
         if not self.anthropic_api_key.strip():
             return "Agent is not configured. Set ANTHROPIC_API_KEY before using chat."
         return None

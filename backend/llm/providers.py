@@ -16,7 +16,7 @@ class AnthropicProvider:
         default_headers = {}
         if workspace_id.strip():
             default_headers["anthropic-workspace-id"] = workspace_id.strip()
-        self.client = Anthropic(api_key=api_key, default_headers=default_headers or None)
+        self.client = Anthropic(api_key=api_key, default_headers=default_headers or None, timeout=20.0)
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         response = self.client.messages.create(
@@ -27,6 +27,25 @@ class AnthropicProvider:
             messages=[{"role": "user", "content": user_prompt}],
         )
         return "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
+
+
+class OllamaProvider:
+    """Explicitly configured local or privately hosted Ollama endpoint."""
+
+    def __init__(self, base_url: str, model: str, max_tokens: int = 300):
+        import httpx
+
+        self.client = httpx.Client(base_url=base_url.rstrip("/"), timeout=20.0)
+        self.model = model
+        self.max_tokens = max_tokens
+
+    def complete(self, system_prompt: str, user_prompt: str) -> str:
+        response = self.client.post("/api/generate", json={
+            "model": self.model, "system": system_prompt, "prompt": user_prompt,
+            "stream": False, "options": {"temperature": 0, "num_predict": self.max_tokens},
+        })
+        response.raise_for_status()
+        return str(response.json()["response"])
 
 
 class LLMProviderFactory:
@@ -44,8 +63,15 @@ class LLMProviderFactory:
         """Build the configured provider without falling back to a mock."""
 
         provider = self.settings.llm_provider.strip().lower()
+        self.settings.require_agent_configuration()
+        if provider == "ollama":
+            return OllamaProvider(
+                base_url=self.settings.ollama_base_url,
+                model=self.settings.llm_model,
+                max_tokens=max_tokens,
+            )
         if provider != "anthropic":
-            raise ConfigurationError("Unsupported LLM provider. Set LLM_PROVIDER to 'anthropic'.")
+            raise ConfigurationError("Unsupported LLM provider.")
         return AnthropicProvider(
             api_key=self.settings.anthropic_api_key,
             model=self.settings.llm_model,

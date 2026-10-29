@@ -1,0 +1,7 @@
+# Financial Investigator evaluation record
+
+Run `.\.venv\Scripts\python.exe -m evals.investigator_benchmark` from the repository root. This suite uses a fake provider and synthetic service results, so it incurs no paid API calls and reveals no financial data. Four cases cover multi-tool planning, transaction-field injection, insufficient history, and a partial tool error. Assertions check tool names, required facts, evidence IDs, account/currency scope, injected claim rejection, and call count. The backend answer builder itself is deterministic; fake provider output can select fact IDs but cannot add prose or numbers.
+
+Measured on 2026-10-28: tool selection, required-fact completeness, evidence coverage, and scope accuracy were each 1.0 over four cases. The injected claim rate was 0.0, with 1.5 average tool calls. Fake-provider response latency ranged about 3–10 ms locally. Token usage and live-model quality were not measured. These are narrow deterministic checks, not evidence that a configured LLM will always choose the best tools. `python evals/run.py` is the separate live provider suite and requires deliberate local or cloud configuration plus a reachable database.
+
+Known gaps: semantic relevance of selected true facts, correct behavior on ambiguous questions, precise historical ingestion state, and live Ollama/Anthropic latency. Further evaluation should include independent human-reviewed answers and inspect false-positive conclusions, not merely syntactically valid tool plans.

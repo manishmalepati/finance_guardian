@@ -1,0 +1,10 @@
+# Financial intelligence execution plan
+
+Audit (2026-10-28): `main` is at `ce82f10`, the merge of PR #11; the working tree was clean. The local PostgreSQL connection was unavailable, so no real-data aggregates or migration backup could be validated here. The existing amount detector uses prior posted dates, median/MAD, and transaction review records. Recurrence has merchant/account/currency series and confirm/dismiss reviews. Spending attribution already reconciles gross settled debit totals. Categorization prefers active aliases, then Plaid mappings, then a queued LLM fallback; explicit user changes supersede old categorizations. The agent has a bounded single-tool graph. The React Intelligence view hosts current anomaly and recurrence panels.
+
+1. **Multi-signal anomalies.** Share settled-purchase selection and query preparation. Preserve the amount API. Add completed-week frequency, sustained category drift, and recurring price alerts with stable IDs, evidence, reviews, tests, and a seeded evaluation. Keep Isolation Forest offline.
+2. **Forecasting.** Reuse the same gross debit population. Compare run rate and historical monthly baselines with walk-forward cutoffs. Expose only intervals supported by residual history. Show nonprobabilistic budget status.
+3. **ML categorization.** Preserve user and alias precedence. Build a local, provenance-aware TF-IDF experiment with chronological and merchant-held-out evaluation. Deploy suggestions only if independent labels justify it.
+4. **Financial investigator.** Extend bounded read-only tools to consume the prior services. Require validated scopes and evidence, add local Ollama as an explicit option, and test grounded multi-step answers with fake providers.
+
+Each checkpoint is a separate stacked PR until earlier branches merge. No PR will be merged automatically. Financial data and model artifacts stay local. Historical backtests based on current rows cannot reconstruct exact past ingestion or past category versions; reports will label this limit.

@@ -9,48 +9,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import AnomalyReview, Transaction, TransactionCategorization
-from backend.domain.money_flow import MOVEMENT_CATEGORY_IDS
-
-
-def eligible_purchases(rows: list[dict], as_of: date) -> tuple[list[dict], dict[str, int]]:
-    excluded = defaultdict(int)
-    candidates = []
-    seen = set()
-    for row in rows:
-        if row["posted_date"] > as_of or row["status"] != "active" or row["is_pending"] \
-                or row.get("removed_at") or row.get("replaced_by_transaction_id"):
-            excluded["not_settled_active"] += 1
-        elif row["direction"] != "debit":
-            excluded["credits_including_refunds"] += 1
-        elif row["category_id"] in MOVEMENT_CATEGORY_IDS:
-            excluded["transfers_and_card_payments"] += 1
-        elif not row["currency"] or row["amount"] <= 0:
-            excluded["missing_currency_or_nonpositive_amount"] += 1
-        elif row["id"] in seen:
-            excluded["duplicate_canonical_id"] += 1
-        else:
-            seen.add(row["id"])
-            candidates.append(row)
-
-    def signature(row: dict) -> tuple:
-        return (row["account_id"], row["posted_date"], row["amount"], row["currency"],
-                row["merchant"].casefold().strip())
-
-    plaid = defaultdict(int)
-    for row in candidates:
-        if row["source"] == "plaid":
-            plaid[signature(row)] += 1
-    statement = defaultdict(int)
-    eligible = []
-    for row in candidates:
-        if row["source"] == "statement":
-            key = signature(row)
-            statement[key] += 1
-            if statement[key] <= plaid[key]:
-                excluded["exact_statement_plaid_overlap"] += 1
-                continue
-        eligible.append(row)
-    return sorted(eligible, key=lambda row: (row["posted_date"], row["id"])), dict(excluded)
+from backend.domain.transaction_eligibility import eligible_purchases
 
 
 def score_purchases(rows: list[dict], as_of: date, start_date: date, currency: str,
@@ -112,8 +71,8 @@ class AnomalyService:
     def __init__(self, session: Session):
         self.session = session
 
-    def list_alerts(self, as_of: date, start_date: date, currency: str = "USD",
-                    account_id: str | None = None) -> dict:
+    def purchase_rows(self, as_of: date, start_date: date,
+                      account_id: str | None = None) -> list[dict]:
         ranked = select(
             TransactionCategorization.transaction_id.label("transaction_id"),
             TransactionCategorization.category_id.label("category_id"),
@@ -145,9 +104,15 @@ class AnomalyService:
             "replaced_by_transaction_id": item["replaced_by_transaction_id"],
             "currency": item["iso_currency_code"], "source": item["source"],
             "category_id": item["category_id"],
+            "description": item["description"],
             "merchant": (item["canonical_merchant_name"] or item["merchant_name"] or item["description"]).strip(),
             "normalized_merchant": item["normalized_merchant"],
         } for item in self.session.execute(statement).mappings()]
+        return rows
+
+    def list_alerts(self, as_of: date, start_date: date, currency: str = "USD",
+                    account_id: str | None = None) -> dict:
+        rows = self.purchase_rows(as_of, start_date, account_id)
         result = score_purchases(rows, as_of, start_date, currency, account_id)
         ids = [item["transaction_id"] for item in result["alerts"]]
         reviews = {item.transaction_id: item.decision for item in self.session.scalars(
