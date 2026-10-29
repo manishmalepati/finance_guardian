@@ -12,8 +12,50 @@ from backend.services.analytics import AnalyticsService
 from backend.services.spending_explanation import SpendingExplanationService
 from backend.services.recurrence import RecurrenceService
 from backend.services.anomalies import AnomalyService
+from backend.services.multi_signal_anomalies import MultiSignalAnomalyService
 
 router = APIRouter()
+
+
+@router.get("/behavioral-alerts")
+def behavioral_alerts(
+    start_date: date, end_date: date, currency: str = "USD",
+    account_id: UUID | None = None, session: Session = Depends(get_session),
+) -> dict:
+    if end_date < start_date or end_date > date.today() or (end_date - start_date).days > 365:
+        raise HTTPException(status_code=400, detail="Choose a past date range of at most 366 days.")
+    currency = currency.upper()
+    if len(currency) != 3 or not currency.isalpha():
+        raise HTTPException(status_code=400, detail="Currency must be a three-letter ISO code.")
+    return MultiSignalAnomalyService(session).list_alerts(
+        end_date, start_date, currency, str(account_id) if account_id else None)
+
+
+class BehavioralReviewSelection(BaseModel):
+    decision: Literal["expected", "unexpected", "unreviewed"]
+    start_date: date
+    end_date: date
+    currency: str = "USD"
+    account_id: UUID | None = None
+
+
+@router.put("/behavioral-alerts/{alert_id}/review")
+def review_behavioral_alert(alert_id: str, payload: BehavioralReviewSelection,
+                            session: Session = Depends(get_session)) -> dict:
+    if not re.fullmatch(r"[0-9a-f]{64}", alert_id):
+        raise HTTPException(status_code=400, detail="Invalid alert ID.")
+    if payload.end_date < payload.start_date or payload.end_date > date.today() \
+            or (payload.end_date - payload.start_date).days > 365:
+        raise HTTPException(status_code=400, detail="Choose a past date range of at most 366 days.")
+    currency = payload.currency.upper()
+    if len(currency) != 3 or not currency.isalpha():
+        raise HTTPException(status_code=400, detail="Currency must be a three-letter ISO code.")
+    try:
+        return MultiSignalAnomalyService(session).review(
+            alert_id, payload.decision, payload.end_date, payload.start_date, currency,
+            str(payload.account_id) if payload.account_id else None)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/anomalies")

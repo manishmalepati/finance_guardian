@@ -12,6 +12,7 @@ import { GoalsPage } from "./GoalsPage";
 import { ExplainSpendingPage } from "./ExplainSpendingPage";
 import { RecurringChargesPanel } from "./RecurringChargesPanel";
 import { AnomalyPanel } from "./AnomalyPanel";
+import { BehavioralAlertsPanel } from "./BehavioralAlertsPanel";
 import type { GoalEvaluation } from "./goalTypes";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -710,6 +711,8 @@ export default function App() {
           accountNames={new Map(accounts.map((account) => [account.id, account.name]))}
           onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
         <AnomalyPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
+          onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+        <BehavioralAlertsPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
           onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
       </>}
 
