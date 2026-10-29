@@ -357,6 +357,23 @@ class TransactionCategorization(Base):
     )
 
 
+class CategorizationCorrection(Base):
+    """One independently selected category, distinct from propagated aliases."""
+
+    __tablename__ = "categorization_corrections"
+    __table_args__ = {"schema": "enrichment"}
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    transaction_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("core.transactions.id", ondelete="CASCADE"), nullable=False
+    )
+    category_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("enrichment.category_taxonomy.category_id"), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(30), nullable=False, default="user_explicit")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class RecurringReview(Base):
     """User judgment for a stable merchant/account/currency recurring series."""
 

@@ -3,7 +3,7 @@
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from backend.db.migrations import anomalies_004, behavioral_005, goals_002, receipts_001, recurrence_003
+from backend.db.migrations import anomalies_004, behavioral_005, corrections_006, goals_002, receipts_001, recurrence_003
 
 
 def run_migrations(engine: Engine) -> None:
@@ -73,4 +73,19 @@ def run_migrations(engine: Engine) -> None:
             connection.execute(
                 text("insert into analytics.schema_migrations (version) values (:version)"),
                 {"version": behavioral_005.VERSION},
+            )
+    with engine.begin() as connection:
+        connection.execute(text(
+            "create table if not exists enrichment.schema_migrations "
+            "(version varchar(100) primary key, applied_at timestamptz not null default now())"
+        ))
+        applied = connection.scalar(
+            text("select 1 from enrichment.schema_migrations where version = :version"),
+            {"version": corrections_006.VERSION},
+        )
+        if not applied:
+            corrections_006.upgrade(connection)
+            connection.execute(
+                text("insert into enrichment.schema_migrations (version) values (:version)"),
+                {"version": corrections_006.VERSION},
             )

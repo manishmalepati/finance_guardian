@@ -1,0 +1,3 @@
+# Offline experiment only. The FastAPI runtime does not import scikit-learn.
+scikit-learn==1.9.1
+# Optional local embedding comparison: install sentence-transformers separately.
