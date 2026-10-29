@@ -13,6 +13,7 @@ import { ExplainSpendingPage } from "./ExplainSpendingPage";
 import { RecurringChargesPanel } from "./RecurringChargesPanel";
 import { AnomalyPanel } from "./AnomalyPanel";
 import { BehavioralAlertsPanel } from "./BehavioralAlertsPanel";
+import { ForecastPanel } from "./ForecastPanel";
 import type { GoalEvaluation } from "./goalTypes";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -714,6 +715,11 @@ export default function App() {
           onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
         <BehavioralAlertsPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
           onTransaction={(id) => { navigate("transactions"); openTransaction(id); }} />
+        <ForecastPanel apiBaseUrl={API_BASE_URL} accountId={accountId}
+          categories={categories.flatMap((category) => [
+            { id: category.category_id, name: category.display_name },
+            ...category.subcategories.map((sub) => ({ id: sub.category_id, name: `${category.display_name} / ${sub.display_name}` })),
+          ])} />
       </>}
 
       {page === "transactions" && <>

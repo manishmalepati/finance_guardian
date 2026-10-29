@@ -13,8 +13,25 @@ from backend.services.spending_explanation import SpendingExplanationService
 from backend.services.recurrence import RecurrenceService
 from backend.services.anomalies import AnomalyService
 from backend.services.multi_signal_anomalies import MultiSignalAnomalyService
+from backend.services.forecasting import ForecastService
 
 router = APIRouter()
+
+
+@router.get("/spending-forecast")
+def spending_forecast(as_of: date | None = None, currency: str = "USD",
+                      account_id: UUID | None = None, category_id: str | None = None,
+                      session: Session = Depends(get_session)) -> dict:
+    as_of = as_of or date.today()
+    if as_of > date.today():
+        raise HTTPException(status_code=400, detail="As-of date cannot be in the future.")
+    currency = currency.upper()
+    if len(currency) != 3 or not currency.isalpha():
+        raise HTTPException(status_code=400, detail="Currency must be a three-letter ISO code.")
+    if category_id is not None and (len(category_id) > 50 or not re.fullmatch(r"[a-z0-9_]+", category_id)):
+        raise HTTPException(status_code=400, detail="Invalid category ID.")
+    return ForecastService(session).forecast(as_of, currency, str(account_id) if account_id else None,
+                                             category_id)
 
 
 @router.get("/behavioral-alerts")
